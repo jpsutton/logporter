@@ -9,12 +9,14 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/goforj/godump"
 )
 
 type Metrics struct {
 	id          []string
 	info        []Info
 	baseMetrics []BaseMetrics
+	logMetrics  []LogMetrics
 }
 
 type Info struct {
@@ -26,9 +28,16 @@ type Info struct {
 
 type BaseMetrics struct {
 	id        string
-	cpuTotal  float64
-	cpuUser   float64
-	cpuKernel float64
+	cpuTotal  string
+	cpuUser   string
+	cpuKernel string
+}
+
+type LogMetrics struct {
+	id     string
+	stdout int
+	stderr int
+	stdall int
 }
 
 // Получить информацию о всех контейнерах
@@ -74,7 +83,7 @@ func (m *Metrics) getBaseMetrics(dockerClient *client.Client, id string) BaseMet
 		panic(err)
 	}
 
-	// godump.Dump(data)
+	godump.Dump(data)
 
 	// Извлекаем данные и заполняем структуру
 	var bm BaseMetrics = BaseMetrics{}
@@ -82,12 +91,43 @@ func (m *Metrics) getBaseMetrics(dockerClient *client.Client, id string) BaseMet
 
 	cpuStats := data["cpu_stats"].(map[string]interface{})
 	cpuUsage := cpuStats["cpu_usage"].(map[string]interface{})
-
-	bm.cpuTotal = cpuUsage["total_usage"].(float64)
-	bm.cpuUser = cpuUsage["usage_in_usermode"].(float64)
-	bm.cpuKernel = cpuUsage["usage_in_kernelmode"].(float64)
+	cpuTotal := cpuUsage["total_usage"].(float64)
+	// Переводим наносекунд в секунды (деление на 1 000 000 000)
+	bm.cpuTotal = fmt.Sprintf("%.3f", cpuTotal/1e9)
+	cpuUser := cpuUsage["usage_in_usermode"].(float64)
+	bm.cpuUser = fmt.Sprintf("%.3f", cpuUser/1e9)
+	cpuKernel := cpuUsage["usage_in_kernelmode"].(float64)
+	bm.cpuKernel = fmt.Sprintf("%.3f", cpuKernel/1e9)
 
 	return bm
+}
+
+// Получить количество логов для указанного контейнера по id
+func (m *Metrics) getLogsCount(dockerClient *client.Client, id string, stdout bool, stderr bool) int {
+
+	// Заполняем параметры для чтения логов контейнеров
+	logsOptions := container.LogsOptions{
+		ShowStdout: stdout,
+		ShowStderr: stderr,
+	}
+
+	// Получаем содержимое логов
+	logs, err := dockerClient.ContainerLogs(context.Background(), id, logsOptions)
+	if err != nil {
+		panic(err)
+	}
+	defer logs.Close()
+
+	// Читаем и парсим json
+	dataLogs, err := io.ReadAll(logs)
+	if err != nil {
+		panic(err)
+	}
+
+	// Преобразуем байты в текст и разбиваем его на массив из строк
+	lines := strings.Split(string(dataLogs), "\n")
+
+	return len(lines)
 }
 
 func main() {
@@ -116,31 +156,18 @@ func main() {
 		metrics.baseMetrics = append(metrics.baseMetrics, metrics.getBaseMetrics(dockerClient, id))
 	}
 
-	// godump.Dump(metrics)
-
-	// Заполняем параметры для чтения логов контейнеров
-	logsOptions := container.LogsOptions{
-		ShowStdout: true,
-		ShowStderr: true,
+	for _, id := range metrics.id {
+		var stdout int = metrics.getLogsCount(dockerClient, id, true, false)
+		var stderr int = metrics.getLogsCount(dockerClient, id, false, true)
+		var stdall int = stdout + stderr
+		var lm LogMetrics = LogMetrics{
+			id:     id,
+			stdout: stdout,
+			stderr: stderr,
+			stdall: stdall,
+		}
+		metrics.logMetrics = append(metrics.logMetrics, lm)
 	}
 
-	// Получаем содержимое логов
-	logs, err := dockerClient.ContainerLogs(context.Background(), metrics.id[0], logsOptions)
-	if err != nil {
-		panic(err)
-	}
-	defer logs.Close()
-
-	// Читаем и парсим json
-	dataLogs, err := io.ReadAll(logs)
-	if err != nil {
-		panic(err)
-	}
-
-	// godump.Dump(string(dataLogs))
-	// fmt.Println(string(dataLogs))
-
-	// Преобразуем байты в текст и разбиваем его на массив из строк
-	lines := strings.Split(string(dataLogs), "\n")
-	fmt.Println(len(lines))
+	godump.Dump(metrics)
 }
