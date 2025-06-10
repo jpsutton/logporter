@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"strings"
 
@@ -27,10 +26,19 @@ type Info struct {
 }
 
 type BaseMetrics struct {
-	id        string
-	cpuTotal  string
-	cpuUser   string
-	cpuKernel string
+	id                 string
+	cpuTotal           float64
+	cpuUser            float64
+	cpuKernel          float64
+	memUsage           int
+	memTotal           int
+	netReceiveBytes    int
+	netReceivePackets  int
+	netTransmitBytes   int
+	netTransmitPackets int
+	ioReadBytes        int
+	ioWriteBytes       int
+	pids               int
 }
 
 type LogMetrics struct {
@@ -40,8 +48,7 @@ type LogMetrics struct {
 	stdall int
 }
 
-// Получить информацию о всех контейнерах
-// Второй параметр для получения всех или только запущенных контейнеров
+// Get information about all containers (second param to get all or only started containers)
 func (m *Metrics) getContainers(dockerClient *client.Client, All bool) []Info {
 	containers, err := dockerClient.ContainerList(context.Background(), container.ListOptions{All: All})
 	if err != nil {
@@ -60,7 +67,7 @@ func (m *Metrics) getContainers(dockerClient *client.Client, All bool) []Info {
 	return info
 }
 
-// Получить список метрик для указанного контейнера по id
+// Get metric list for specified container by id
 func (m *Metrics) getBaseMetrics(dockerClient *client.Client, id string) BaseMetrics {
 	stats, err := dockerClient.ContainerStats(context.Background(), id, false)
 	if err != nil {
@@ -68,94 +75,136 @@ func (m *Metrics) getBaseMetrics(dockerClient *client.Client, id string) BaseMet
 	}
 	defer stats.Body.Close()
 
-	// Читаем статистику
+	// Read statistics
 	jsonStats, err := io.ReadAll(stats.Body)
 	if err != nil {
 		panic(err)
 	}
 
-	// Создаем карту из (ключей string и значений с любым типом данных) для извлечения данных из json
+	// Create a map to extract data from json
 	var data map[string]interface{}
 
-	// Парсим json и заполняем карту
+	// Parsing json and fill in map
 	err = json.Unmarshal(jsonStats, &data)
 	if err != nil {
 		panic(err)
 	}
 
-	godump.Dump(data)
+	// godump.Dump(data)
 
-	// Извлекаем данные и заполняем структуру
+	// Extract data and fill structure
 	var bm BaseMetrics = BaseMetrics{}
 	bm.id = id
 
+	// Processor
 	cpuStats := data["cpu_stats"].(map[string]interface{})
 	cpuUsage := cpuStats["cpu_usage"].(map[string]interface{})
 	cpuTotal := cpuUsage["total_usage"].(float64)
-	// Переводим наносекунд в секунды (деление на 1 000 000 000)
-	bm.cpuTotal = fmt.Sprintf("%.3f", cpuTotal/1e9)
+	// Convert nanoseconds to seconds (divided by 1 000 000 000 000)
+	bm.cpuTotal = cpuTotal / 1e9
 	cpuUser := cpuUsage["usage_in_usermode"].(float64)
-	bm.cpuUser = fmt.Sprintf("%.3f", cpuUser/1e9)
+	bm.cpuUser = cpuUser / 1e9
 	cpuKernel := cpuUsage["usage_in_kernelmode"].(float64)
-	bm.cpuKernel = fmt.Sprintf("%.3f", cpuKernel/1e9)
+	bm.cpuKernel = cpuKernel / 1e9
+
+	// Memory
+	memory_stats := data["memory_stats"].(map[string]interface{})
+	memory_usage := memory_stats["usage"].(float64)
+	memUsage := int(memory_usage) / 1024 / 1024
+	bm.memUsage = memUsage
+	memory_limit := memory_stats["limit"].(float64)
+	memLimit := int(memory_limit) / 1024 / 1024
+	bm.memTotal = memLimit
+
+	// Network
+	networks := data["networks"].(map[string]interface{})
+	network_interface := networks["eth0"].(map[string]interface{})
+	rx_bytes := network_interface["rx_bytes"].(float64)
+	bm.netReceiveBytes = int(rx_bytes)
+	rx_packets := network_interface["rx_packets"].(float64)
+	bm.netReceivePackets = int(rx_packets)
+	tx_bytes := network_interface["tx_bytes"].(float64)
+	bm.netTransmitBytes = int(tx_bytes)
+	tx_packets := network_interface["tx_packets"].(float64)
+	bm.netTransmitPackets = int(tx_packets)
+
+	// Disk
+	blkioStats := data["blkio_stats"].(map[string]interface{})
+	ioBytesRecursive := blkioStats["io_service_bytes_recursive"].([]interface{})
+	for i := range ioBytesRecursive {
+		if ioBytesRecursive[i].(map[string]interface{})["op"] == "read" {
+			bm.ioReadBytes = int(ioBytesRecursive[i].(map[string]interface{})["value"].(float64))
+		} else {
+			bm.ioWriteBytes = int(ioBytesRecursive[i].(map[string]interface{})["value"].(float64))
+		}
+	}
+
+	// Current block IOps
+	// int(ioBytesRecursive[i].(map[string]interface{})["value"].(float64)) - bm.ioRead
+
+	// PIDs count
+	pidsStats := data["pids_stats"].(map[string]interface{})
+	bm.pids = int(pidsStats["current"].(float64))
 
 	return bm
 }
 
-// Получить количество логов для указанного контейнера по id
+// Get line count from logs for specified container by id
 func (m *Metrics) getLogsCount(dockerClient *client.Client, id string, stdout bool, stderr bool) int {
 
-	// Заполняем параметры для чтения логов контейнеров
+	// Fill in options to read container logs
 	logsOptions := container.LogsOptions{
 		ShowStdout: stdout,
 		ShowStderr: stderr,
 	}
 
-	// Получаем содержимое логов
+	// Get log content
 	logs, err := dockerClient.ContainerLogs(context.Background(), id, logsOptions)
 	if err != nil {
 		panic(err)
 	}
 	defer logs.Close()
 
-	// Читаем и парсим json
+	// Read and parsing json
 	dataLogs, err := io.ReadAll(logs)
 	if err != nil {
 		panic(err)
 	}
 
-	// Преобразуем байты в текст и разбиваем его на массив из строк
+	// fmt.Println(string(dataLogs))
+
+	// Convert bytes to text and get array from rows
 	lines := strings.Split(string(dataLogs), "\n")
 
-	return len(lines)
+	return len(lines) - 1
 }
 
 func main() {
-	// Инициализируем основную структуру
+	// Initialize the main structure
 	var metrics *Metrics = &Metrics{}
 
-	// Создаем клиент с параметрами подключения из переменных окружения и согласования версии API с Docker daemon
+	// Create client with connection parameters from environment variables and approval of the API version with the Docker Daemon
 	dockerClient, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	client.NewClientWithOpts()
 	if err != nil {
 		panic(err)
 	}
-	// Закрывает соединение при выходе из main()
 	defer dockerClient.Close()
 
-	// Получаем список контейнеров с информацией о состояние
+	// Get a list of containers with status information
 	metrics.info = metrics.getContainers(dockerClient, false)
 
-	// Извлекаем массив идентификаторов всех контейнеров
+	// Get all container ID array
 	for _, i := range metrics.info {
 		metrics.id = append(metrics.id, i.id)
 	}
 
-	// Получаем список базовых метрик
+	// Get list of basic metrics
 	for _, id := range metrics.id {
 		metrics.baseMetrics = append(metrics.baseMetrics, metrics.getBaseMetrics(dockerClient, id))
 	}
 
+	// Get a list of custom metrics from logs
 	for _, id := range metrics.id {
 		var stdout int = metrics.getLogsCount(dockerClient, id, true, false)
 		var stderr int = metrics.getLogsCount(dockerClient, id, false, true)
