@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
@@ -307,6 +308,8 @@ func (m *Metrics) prometheusMetrics(id string) []string {
 		m.logMetrics[id].stdall,
 	)...)
 
+	prometheusMetrics = append(prometheusMetrics, "")
+
 	return prometheusMetrics
 }
 
@@ -322,40 +325,48 @@ func main() {
 	}
 	defer dockerClient.Close()
 
-	// Get a list of containers with status information and all container ID array
-	metrics.info, metrics.id = metrics.getContainers(dockerClient, false)
+	// /metrics endpoint
+	http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		// Get a list of containers with status information and all container ID array
+		metrics.info, metrics.id = metrics.getContainers(dockerClient, false)
 
-	// Get list of basic metrics
-	metrics.baseMetrics = map[string]*BaseMetrics{}
-	for _, id := range metrics.id {
-		metrics.baseMetrics[id] = metrics.getBaseMetrics(dockerClient, id)
-	}
-
-	// // Get a list of custom metrics from logs
-	metrics.logMetrics = map[string]*LogMetrics{}
-	for _, id := range metrics.id {
-		stdout := metrics.getLogsCount(dockerClient, id, true, false)
-		stderr := metrics.getLogsCount(dockerClient, id, false, true)
-		stdall := stdout + stderr
-		var lm LogMetrics = LogMetrics{
-			stdout: stdout,
-			stderr: stderr,
-			stdall: stdall,
+		// Get list of basic metrics
+		metrics.baseMetrics = map[string]*BaseMetrics{}
+		for _, id := range metrics.id {
+			metrics.baseMetrics[id] = metrics.getBaseMetrics(dockerClient, id)
 		}
-		metrics.logMetrics[id] = &lm
-	}
 
-	// Debug output main structure
-	// godump.Dump(metrics)
+		// // Get a list of custom metrics from logs
+		metrics.logMetrics = map[string]*LogMetrics{}
+		for _, id := range metrics.id {
+			stdout := metrics.getLogsCount(dockerClient, id, true, false)
+			stderr := metrics.getLogsCount(dockerClient, id, false, true)
+			stdall := stdout + stderr
+			var lm LogMetrics = LogMetrics{
+				stdout: stdout,
+				stderr: stderr,
+				stdall: stdall,
+			}
+			metrics.logMetrics[id] = &lm
+		}
 
-	// Get metrics in Prometheus format
-	var prometheusMetrics []string
-	for _, id := range metrics.id {
-		prometheusMetrics = append(prometheusMetrics, metrics.prometheusMetrics(id)...)
-	}
+		// Debug output main structure
+		// godump.Dump(metrics)
 
-	// Debug metrics output
-	for _, m := range prometheusMetrics {
-		fmt.Println(m)
-	}
+		// Get metrics in Prometheus format
+		var prometheusMetrics []string
+		for _, id := range metrics.id {
+			prometheusMetrics = append(prometheusMetrics, metrics.prometheusMetrics(id)...)
+		}
+
+		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+
+		// Output metrics in Prometheus format
+		for _, m := range prometheusMetrics {
+			fmt.Fprintln(w, m)
+		}
+	})
+
+	// Start HTTP server
+	http.ListenAndServe(":8080", nil)
 }

@@ -10,9 +10,10 @@ Prometheus exporter for getting base metrics and number of logged messages in co
 
 ## Roadmap
 
-- [x] Functions for extracting basic and custom metrics
+- [x] Functions for extracting base and custom metrics
 - [x] Converting metrics to Prometheus format
-- [ ] HTTP server
+- [X] HTTP server
+- [ ] Logging the exporter work
 - [ ] Error handling
 - [ ] Getting data in a goroutine
 - [ ] Build Docker image
