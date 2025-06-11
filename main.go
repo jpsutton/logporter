@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
@@ -57,6 +58,7 @@ func (m *Metrics) getContainers(dockerClient *client.Client, All bool) (map[stri
 	for _, container := range containers {
 		// Debug output container info
 		// godump.Dump(container)
+
 		i := Info{}
 		currentId := container.ID
 		i.name = strings.Replace(container.Names[0], "/", "", 1)
@@ -181,12 +183,15 @@ func (m *Metrics) getLogsCount(dockerClient *client.Client, id string, stdout bo
 }
 
 // Converting metrics to Prometheus format
-func (m *Metrics) prometheusFormat(metricName, helpText, id, typeData string, value any) []string {
+func (m *Metrics) prometheusFormat(metricName, helpText, typeData, id, containerName, hostname string, value any) []string {
 	var metricsText []string
 
 	metricsText = append(metricsText, "# HELP "+metricName+" "+helpText)
 	metricsText = append(metricsText, "# TYPE "+metricName+" "+typeData)
-	metricsLine := fmt.Sprintf("%s{containerId=\"%s\"} %v", metricName, id, value)
+	metricsLine := fmt.Sprintf(
+		"%s{containerId=\"%s\",containerName=\"%s\",hostname=\"%s\"} %v",
+		metricName, id, containerName, hostname, value,
+	)
 	metricsText = append(metricsText, metricsLine)
 
 	return metricsText
@@ -197,25 +202,31 @@ func (m *Metrics) prometheusMetrics(id string) []string {
 	// Main text slice
 	var prometheusMetrics []string
 
+	// Get hostname
+	hostname, _ := os.Hostname()
+
+	// Get container name
+	containerName := m.info[id].name
+
 	// Processor
 	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
 		"docker_cpu_usage_total",
 		"Total CPU usage (user and kernel) in seconds",
-		id, "gauge",
+		"gauge", id, containerName, hostname,
 		m.baseMetrics[id].cpuTotal,
 	)...)
 
 	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
 		"docker_cpu_usage_user",
 		"User CPU usage in seconds",
-		id, "gauge",
+		"gauge", id, containerName, hostname,
 		m.baseMetrics[id].cpuUser,
 	)...)
 
 	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
 		"docker_cpu_usage_kernel",
 		"Kernel CPU usage in seconds",
-		id, "gauge",
+		"gauge", id, containerName, hostname,
 		m.baseMetrics[id].cpuKernel,
 	)...)
 
@@ -223,14 +234,14 @@ func (m *Metrics) prometheusMetrics(id string) []string {
 	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
 		"docker_memory_total",
 		"Total memory size in bytes",
-		id, "gauge",
+		"gauge", id, containerName, hostname,
 		m.baseMetrics[id].memTotalBtyes,
 	)...)
 
 	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
 		"docker_memory_usage",
 		"Usage memory size in bytes",
-		id, "gauge",
+		"gauge", id, containerName, hostname,
 		m.baseMetrics[id].memUsageBtyes,
 	)...)
 
@@ -238,28 +249,28 @@ func (m *Metrics) prometheusMetrics(id string) []string {
 	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
 		"docker_network_received_bytes",
 		"Number of bytes received on the network",
-		id, "counter",
+		"counter", id, containerName, hostname,
 		m.baseMetrics[id].netReceiveBytes,
 	)...)
 
 	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
 		"docker_network_received_packages",
 		"Number of packages received on the network",
-		id, "counter",
+		"counter", id, containerName, hostname,
 		m.baseMetrics[id].netReceivePackets,
 	)...)
 
 	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
 		"docker_network_transmit_bytes",
 		"Number of bytes transmitted on the network",
-		id, "counter",
+		"counter", id, containerName, hostname,
 		m.baseMetrics[id].netTransmitBytes,
 	)...)
 
 	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
 		"docker_network_transmit_packages",
 		"Number of packages transmitted on the network",
-		id, "counter",
+		"counter", id, containerName, hostname,
 		m.baseMetrics[id].netTransmitPackets,
 	)...)
 
@@ -267,14 +278,14 @@ func (m *Metrics) prometheusMetrics(id string) []string {
 	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
 		"docker_io_read_bytes",
 		"Number of bytes read by the block device",
-		id, "counter",
+		"counter", id, containerName, hostname,
 		m.baseMetrics[id].ioReadBytes,
 	)...)
 
 	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
 		"docker_io_write_bytes",
 		"Number of bytes write by the block device",
-		id, "counter",
+		"counter", id, containerName, hostname,
 		m.baseMetrics[id].ioWriteBytes,
 	)...)
 
@@ -282,7 +293,7 @@ func (m *Metrics) prometheusMetrics(id string) []string {
 	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
 		"docker_process_pids_count",
 		"Number of running processes and threads",
-		id, "gauge",
+		"gauge", id, containerName, hostname,
 		m.baseMetrics[id].pids,
 	)...)
 
@@ -290,21 +301,21 @@ func (m *Metrics) prometheusMetrics(id string) []string {
 	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
 		"docker_logs_stdout_count",
 		"Number of logs from stdout stream in the last 10 seconds",
-		id, "gauge",
+		"counter", id, containerName, hostname,
 		m.logMetrics[id].stdout,
 	)...)
 
 	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
 		"docker_logs_stderr_count",
 		"Number of logs from stderr stream in the last 10 seconds",
-		id, "gauge",
+		"counter", id, containerName, hostname,
 		m.logMetrics[id].stderr,
 	)...)
 
 	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
 		"docker_logs_all_count",
 		"Number of logs from all stream in the last 10 seconds",
-		id, "gauge",
+		"counter", id, containerName, hostname,
 		m.logMetrics[id].stdall,
 	)...)
 
@@ -326,46 +337,48 @@ func main() {
 	defer dockerClient.Close()
 
 	// /metrics endpoint
-	http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
-		// Get a list of containers with status information and all container ID array
-		metrics.info, metrics.id = metrics.getContainers(dockerClient, false)
+	// http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+	// Get a list of containers with status information and all container ID array
+	metrics.info, metrics.id = metrics.getContainers(dockerClient, false)
 
-		// Get list of basic metrics
-		metrics.baseMetrics = map[string]*BaseMetrics{}
-		for _, id := range metrics.id {
-			metrics.baseMetrics[id] = metrics.getBaseMetrics(dockerClient, id)
+	// Get list of basic metrics
+	metrics.baseMetrics = map[string]*BaseMetrics{}
+	for _, id := range metrics.id {
+		metrics.baseMetrics[id] = metrics.getBaseMetrics(dockerClient, id)
+	}
+
+	// // Get a list of custom metrics from logs
+	metrics.logMetrics = map[string]*LogMetrics{}
+	for _, id := range metrics.id {
+		stdout := metrics.getLogsCount(dockerClient, id, true, false)
+		stderr := metrics.getLogsCount(dockerClient, id, false, true)
+		stdall := stdout + stderr
+		var lm LogMetrics = LogMetrics{
+			stdout: stdout,
+			stderr: stderr,
+			stdall: stdall,
 		}
+		metrics.logMetrics[id] = &lm
+	}
 
-		// // Get a list of custom metrics from logs
-		metrics.logMetrics = map[string]*LogMetrics{}
-		for _, id := range metrics.id {
-			stdout := metrics.getLogsCount(dockerClient, id, true, false)
-			stderr := metrics.getLogsCount(dockerClient, id, false, true)
-			stdall := stdout + stderr
-			var lm LogMetrics = LogMetrics{
-				stdout: stdout,
-				stderr: stderr,
-				stdall: stdall,
-			}
-			metrics.logMetrics[id] = &lm
-		}
+	// Debug output main structure
+	// godump.Dump(metrics)
 
-		// Debug output main structure
-		// godump.Dump(metrics)
+	// Get metrics in Prometheus format
+	var prometheusMetrics []string
+	for _, id := range metrics.id {
+		prometheusMetrics = append(prometheusMetrics, metrics.prometheusMetrics(id)...)
+	}
 
-		// Get metrics in Prometheus format
-		var prometheusMetrics []string
-		for _, id := range metrics.id {
-			prometheusMetrics = append(prometheusMetrics, metrics.prometheusMetrics(id)...)
-		}
+	// w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 
-		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
-
-		// Output metrics in Prometheus format
-		for _, m := range prometheusMetrics {
-			fmt.Fprintln(w, m)
-		}
-	})
+	// Output metrics in Prometheus format
+	for _, m := range prometheusMetrics {
+		// fmt.Fprintln(w, m)
+		// Debug output metrics on console
+		fmt.Println(m)
+	}
+	// })
 
 	// Start HTTP server
 	http.ListenAndServe(":8080", nil)
