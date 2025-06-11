@@ -3,12 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
-	"github.com/goforj/godump"
 )
 
 type Metrics struct {
@@ -56,6 +56,7 @@ func (m *Metrics) getContainers(dockerClient *client.Client, All bool) []Info {
 	}
 	var info []Info = []Info{}
 	for _, container := range containers {
+		// Debug output container info
 		// godump.Dump(container)
 		var i Info = Info{}
 		i.id = container.ID
@@ -90,6 +91,7 @@ func (m *Metrics) getBaseMetrics(dockerClient *client.Client, id string) BaseMet
 		panic(err)
 	}
 
+	// Debug output metrics
 	// godump.Dump(data)
 
 	// Extract data and fill structure
@@ -171,12 +173,25 @@ func (m *Metrics) getLogsCount(dockerClient *client.Client, id string, stdout bo
 		panic(err)
 	}
 
+	// Debug output logs
 	// fmt.Println(string(dataLogs))
 
 	// Convert bytes to text and get array from rows
 	lines := strings.Split(string(dataLogs), "\n")
 
 	return len(lines) - 1
+}
+
+// Converting metrics to Prometheus format
+func (m *Metrics) prometheusFormat(metricName, helpText, id string, value any) []string {
+	var metricsText []string
+
+	metricsText = append(metricsText, "# HELP "+metricName+" "+helpText)
+	metricsText = append(metricsText, "# TYPE "+metricName+" gauge")
+	metricsLine := fmt.Sprintf("%s{containerId=\"%s\"} %v", metricName, id, value)
+	metricsText = append(metricsText, metricsLine)
+
+	return metricsText
 }
 
 func main() {
@@ -218,5 +233,32 @@ func main() {
 		metrics.logMetrics = append(metrics.logMetrics, lm)
 	}
 
-	godump.Dump(metrics)
+	// Debug output main structure
+	// godump.Dump(metrics)
+
+	// Main text slice
+	var metricsTextOutput []string
+
+	// ПЕРЕДЕЛАТЬ структуру на id:{}
+
+	// Get metrics to Prometheus format
+	for _, id := range metrics.id {
+		metricsTextOutput = append(metricsTextOutput, metrics.prometheusFormat(
+			"docker_logs_stdout_count",
+			"Number of logs from stdout stream in the last 10 seconds",
+			id,
+			metrics.logMetrics[0].stdout,
+		)...)
+
+		metricsTextOutput = append(metricsTextOutput, metrics.prometheusFormat(
+			"docker_logs_stderr_count",
+			"Number of logs from stderr stream in the last 10 seconds",
+			id,
+			metrics.logMetrics[0].stderr,
+		)...)
+	}
+
+	for _, m := range metricsTextOutput {
+		fmt.Println(m)
+	}
 }
