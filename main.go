@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
@@ -100,51 +102,92 @@ func (m *Metrics) getBaseMetrics(dockerClient *client.Client, id string) *BaseMe
 	var bm BaseMetrics = BaseMetrics{}
 
 	// Processor
-	cpuStats := data["cpu_stats"].(map[string]interface{})
-	cpuUsage := cpuStats["cpu_usage"].(map[string]interface{})
-	cpuTotal := cpuUsage["total_usage"].(float64)
-	// Convert nanoseconds to seconds (divided by 1 000 000 000 000)
-	bm.cpuTotal = cpuTotal / 1e9
-	cpuUser := cpuUsage["usage_in_usermode"].(float64)
-	bm.cpuUser = cpuUser / 1e9
-	cpuKernel := cpuUsage["usage_in_kernelmode"].(float64)
-	bm.cpuKernel = cpuKernel / 1e9
+	cpuStats, ok := data["cpu_stats"].(map[string]interface{})
+	if ok {
+		cpuUsage, ok := cpuStats["cpu_usage"].(map[string]interface{})
+		if ok {
+			cpuTotal, ok := cpuUsage["total_usage"].(float64)
+			if ok {
+				// Convert nanoseconds to seconds (divided by 1 000 000 000 000)
+				bm.cpuTotal = cpuTotal / 1e9
+			}
+			cpuUser, ok := cpuUsage["usage_in_usermode"].(float64)
+			if ok {
+				bm.cpuUser = cpuUser / 1e9
+			}
+			cpuKernel, ok := cpuUsage["usage_in_kernelmode"].(float64)
+			if ok {
+				bm.cpuKernel = cpuKernel / 1e9
+			}
+		}
+	}
 
 	// Memory
-	memory_stats := data["memory_stats"].(map[string]interface{})
-	memory_limit := memory_stats["limit"].(float64)
-	memLimit := int(memory_limit)
-	bm.memTotalBtyes = memLimit
-	memory_usage := memory_stats["usage"].(float64)
-	memUsage := int(memory_usage)
-	bm.memUsageBtyes = memUsage
+	memory_stats, ok := data["memory_stats"].(map[string]interface{})
+	if ok {
+		memory_limit, ok := memory_stats["limit"].(float64)
+		if ok {
+			memLimit := int(memory_limit)
+			bm.memTotalBtyes = memLimit
+		}
+		memory_usage, ok := memory_stats["usage"].(float64)
+		if ok {
+			memUsage := int(memory_usage)
+			bm.memUsageBtyes = memUsage
+		}
+	}
 
 	// Network
-	networks := data["networks"].(map[string]interface{})
-	network_interface := networks["eth0"].(map[string]interface{})
-	rx_bytes := network_interface["rx_bytes"].(float64)
-	bm.netReceiveBytes = int(rx_bytes)
-	rx_packets := network_interface["rx_packets"].(float64)
-	bm.netReceivePackets = int(rx_packets)
-	tx_bytes := network_interface["tx_bytes"].(float64)
-	bm.netTransmitBytes = int(tx_bytes)
-	tx_packets := network_interface["tx_packets"].(float64)
-	bm.netTransmitPackets = int(tx_packets)
+	networks, ok := data["networks"].(map[string]interface{})
+	if ok {
+		// network_interface := networks["eth0"].(map[string]interface{})
+		var network_interface map[string]interface{}
+		var ok bool
+		for _, v := range networks {
+			// Get the first interface
+			network_interface, ok = v.(map[string]interface{})
+			break
+		}
+		if ok {
+			rx_bytes, ok := network_interface["rx_bytes"].(float64)
+			if ok {
+				bm.netReceiveBytes = int(rx_bytes)
+			}
+			rx_packets, ok := network_interface["rx_packets"].(float64)
+			if ok {
+				bm.netReceivePackets = int(rx_packets)
+			}
+			tx_bytes, ok := network_interface["tx_bytes"].(float64)
+			if ok {
+				bm.netTransmitBytes = int(tx_bytes)
+			}
+			tx_packets, ok := network_interface["tx_packets"].(float64)
+			if ok {
+				bm.netTransmitPackets = int(tx_packets)
+			}
+		}
+	}
 
 	// IO
-	blkioStats := data["blkio_stats"].(map[string]interface{})
-	ioBytesRecursive := blkioStats["io_service_bytes_recursive"].([]interface{})
-	for i := range ioBytesRecursive {
-		if ioBytesRecursive[i].(map[string]interface{})["op"] == "read" {
-			bm.ioReadBytes = int(ioBytesRecursive[i].(map[string]interface{})["value"].(float64))
-		} else {
-			bm.ioWriteBytes = int(ioBytesRecursive[i].(map[string]interface{})["value"].(float64))
+	blkioStats, ok := data["blkio_stats"].(map[string]interface{})
+	if ok {
+		ioBytesRecursive, ok := blkioStats["io_service_bytes_recursive"].([]interface{})
+		if ok {
+			for i := range ioBytesRecursive {
+				if ioBytesRecursive[i].(map[string]interface{})["op"] == "read" {
+					bm.ioReadBytes = int(ioBytesRecursive[i].(map[string]interface{})["value"].(float64))
+				} else {
+					bm.ioWriteBytes = int(ioBytesRecursive[i].(map[string]interface{})["value"].(float64))
+				}
+			}
 		}
 	}
 
 	// PIDs count
-	pidsStats := data["pids_stats"].(map[string]interface{})
-	bm.pids = int(pidsStats["current"].(float64))
+	pidsStats, ok := data["pids_stats"].(map[string]interface{})
+	if ok {
+		bm.pids = int(pidsStats["current"].(float64))
+	}
 
 	return &bm
 }
@@ -324,6 +367,54 @@ func (m *Metrics) prometheusMetrics(id string) []string {
 	return prometheusMetrics
 }
 
+// Main function for getting metrics
+func (m *Metrics) getMetrics(dockerClient *client.Client) []string {
+	// Get a list of containers with status information and all container ID array
+	m.info, m.id = m.getContainers(dockerClient, false)
+
+	// Get list of basic metrics
+	m.baseMetrics = map[string]*BaseMetrics{}
+	for _, id := range m.id {
+		m.baseMetrics[id] = m.getBaseMetrics(dockerClient, id)
+	}
+
+	// Get a list of custom metrics from logs
+	m.logMetrics = map[string]*LogMetrics{}
+	for _, id := range m.id {
+		stdout := m.getLogsCount(dockerClient, id, true, false)
+		stderr := m.getLogsCount(dockerClient, id, false, true)
+		stdall := stdout + stderr
+		var lm LogMetrics = LogMetrics{
+			stdout: stdout,
+			stderr: stderr,
+			stdall: stdall,
+		}
+		m.logMetrics[id] = &lm
+	}
+
+	// Debug output main structure
+	// godump.Dump(metrics)
+
+	// Get metrics in Prometheus format
+	var prometheusMetrics []string
+	for _, id := range m.id {
+		prometheusMetrics = append(prometheusMetrics, m.prometheusMetrics(id)...)
+	}
+
+	return prometheusMetrics
+}
+
+// Logging http server requests
+func loggingMiddleware(next http.Handler) http.Handler {
+	log := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		log.Printf("%s request on %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+		next.ServeHTTP(w, r)
+		log.Printf("Response time %v from %s", time.Since(start)/1000000*1000000, r.RemoteAddr)
+	})
+	return log
+}
+
 func main() {
 	// Initialize the main structure
 	var metrics *Metrics = &Metrics{}
@@ -336,50 +427,23 @@ func main() {
 	}
 	defer dockerClient.Close()
 
-	// /metrics endpoint
-	// http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
-	// Get a list of containers with status information and all container ID array
-	metrics.info, metrics.id = metrics.getContainers(dockerClient, false)
+	httpServerMux := http.NewServeMux()
 
-	// Get list of basic metrics
-	metrics.baseMetrics = map[string]*BaseMetrics{}
-	for _, id := range metrics.id {
-		metrics.baseMetrics[id] = metrics.getBaseMetrics(dockerClient, id)
-	}
-
-	// // Get a list of custom metrics from logs
-	metrics.logMetrics = map[string]*LogMetrics{}
-	for _, id := range metrics.id {
-		stdout := metrics.getLogsCount(dockerClient, id, true, false)
-		stderr := metrics.getLogsCount(dockerClient, id, false, true)
-		stdall := stdout + stderr
-		var lm LogMetrics = LogMetrics{
-			stdout: stdout,
-			stderr: stderr,
-			stdall: stdall,
+	// Endpoint: /metrics
+	httpServerMux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+		prometheusMetrics := metrics.getMetrics(dockerClient)
+		// Output metrics in Prometheus format
+		for _, m := range prometheusMetrics {
+			fmt.Fprintln(w, m)
 		}
-		metrics.logMetrics[id] = &lm
-	}
+	})
 
-	// Debug output main structure
-	// godump.Dump(metrics)
-
-	// Get metrics in Prometheus format
-	var prometheusMetrics []string
-	for _, id := range metrics.id {
-		prometheusMetrics = append(prometheusMetrics, metrics.prometheusMetrics(id)...)
-	}
-
-	// w.Header().Set("Content-Type", "text/plain; version=0.0.4")
-
-	// Output metrics in Prometheus format
-	for _, m := range prometheusMetrics {
-		// fmt.Fprintln(w, m)
-		// Debug output metrics on console
-		fmt.Println(m)
-	}
-	// })
+	logSrv := loggingMiddleware(httpServerMux)
 
 	// Start HTTP server
-	http.ListenAndServe(":8080", nil)
+	err = http.ListenAndServe(":8080", logSrv)
+	if err != nil {
+		log.Fatal(err)
+	}
 }

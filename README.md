@@ -2,20 +2,20 @@
 
 Prometheus exporter for getting base metrics and number of logged messages in containers.
 
-## For what?
+## Why log the number of logs?
 
-- Comparison of increased load with the number of logged messages.
-- If the application is not resource-intensive, the exporter will display increased load by the number of logged messages. Experimentally, you can determine threshold values ​​for your applications under average or increased load.
-- Preventing incidents and accelerating analysis. For example, unexpected changes occurred in the application's operation, so when analyzing logs, it will be useful to know at what point in time the most messages and errors were received.
+- Display the number of requests to the application if the application registers each request by keywords.
+- Compare the increased load with the number of logged messages.
+- If the application is not resource-intensive, the number of logged messages will show the increased load.
+- Speed ​​up log analysis by displaying at what point in time the most messages were received from the standard and error stream.
 
 ## Roadmap
 
 - [x] Functions for extracting base and custom metrics
 - [x] Converting metrics to Prometheus format
 - [X] HTTP server
-- [ ] Logging the exporter work
-- [ ] Error handling
+- [X] Error handling (check for missing data)
 - [ ] Getting data in a goroutine
-- [ ] Build Docker image
-- [ ] Dashboard Grafana
+- [ ] Building a Docker image
+- [ ] Grafana dashboard
 - [ ] Testing
