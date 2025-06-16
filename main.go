@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
@@ -16,10 +17,12 @@ import (
 )
 
 type Metrics struct {
-	id          []string
-	info        map[string]*Info
-	baseMetrics map[string]*BaseMetrics
-	logMetrics  map[string]*LogMetrics
+	containersUp   int
+	containersDown int
+	id             []string
+	info           map[string]*Info
+	baseMetrics    map[string]*BaseMetrics
+	logMetrics     map[string]*LogMetrics
 }
 
 type Info struct {
@@ -29,6 +32,7 @@ type Info struct {
 }
 
 type BaseMetrics struct {
+	id                 string
 	cpuTotal           float64
 	cpuUser            float64
 	cpuKernel          float64
@@ -49,31 +53,42 @@ type LogMetrics struct {
 	stdall int
 }
 
+type LogMetric struct {
+	id     string
+	stdout bool
+	stderr bool
+	value  int
+}
+
 // Get information about all containers (second param to get all or only started containers)
-func (m *Metrics) getContainers(dockerClient *client.Client, All bool) (map[string]*Info, []string) {
+func (m *Metrics) getContainers(dockerClient *client.Client, All bool) (map[string]*Info, []string, int) {
 	containers, err := dockerClient.ContainerList(context.Background(), container.ListOptions{All: All})
 	if err != nil {
 		panic(err)
 	}
+	containersUp := 0
 	info := map[string]*Info{}
 	var idArr []string
 	for _, container := range containers {
 		// Debug output container info
 		// godump.Dump(container)
-
+		// Counting the number of running containers
+		containersUp++
+		// Fills the info structure
 		i := Info{}
 		currentId := container.ID
 		i.name = strings.Replace(container.Names[0], "/", "", 1)
 		i.state = container.State
 		i.status = container.Status
 		info[currentId] = &i
+		// Fills an array of container id
 		idArr = append(idArr, currentId)
 	}
-	return info, idArr
+	return info, idArr, containersUp
 }
 
 // Get metric list for specified container by id
-func (m *Metrics) getBaseMetrics(dockerClient *client.Client, id string) *BaseMetrics {
+func (m *Metrics) getBaseMetrics(dockerClient *client.Client, id string, wg *sync.WaitGroup, results chan *BaseMetrics) {
 	stats, err := dockerClient.ContainerStats(context.Background(), id, false)
 	if err != nil {
 		panic(err)
@@ -100,6 +115,8 @@ func (m *Metrics) getBaseMetrics(dockerClient *client.Client, id string) *BaseMe
 
 	// Extract data and fill structure
 	var bm BaseMetrics = BaseMetrics{}
+
+	bm.id = id
 
 	// Processor
 	cpuStats, ok := data["cpu_stats"].(map[string]interface{})
@@ -189,11 +206,12 @@ func (m *Metrics) getBaseMetrics(dockerClient *client.Client, id string) *BaseMe
 		bm.pids = int(pidsStats["current"].(float64))
 	}
 
-	return &bm
+	defer wg.Done()
+	results <- &bm
 }
 
 // Get line count from logs for specified container by id
-func (m *Metrics) getLogsCount(dockerClient *client.Client, id string, stdout bool, stderr bool) int {
+func (m *Metrics) getLogsCount(dockerClient *client.Client, id string, stdout bool, stderr bool, wg *sync.WaitGroup, results chan *LogMetric) {
 
 	// Fill in options to read container logs
 	logsOptions := container.LogsOptions{
@@ -222,7 +240,15 @@ func (m *Metrics) getLogsCount(dockerClient *client.Client, id string, stdout bo
 
 	countLogs := len(lines) - 1
 
-	return countLogs
+	logMetric := LogMetric{
+		id:     id,
+		stdout: stdout,
+		stderr: stderr,
+		value:  countLogs,
+	}
+
+	defer wg.Done()
+	results <- &logMetric
 }
 
 // Converting metrics to Prometheus format
@@ -370,26 +396,57 @@ func (m *Metrics) prometheusMetrics(id string) []string {
 // Main function for getting metrics
 func (m *Metrics) getMetrics(dockerClient *client.Client) []string {
 	// Get a list of containers with status information and all container ID array
-	m.info, m.id = m.getContainers(dockerClient, false)
+	m.info, m.id, m.containersUp = m.getContainers(dockerClient, false)
 
-	// Get list of basic metrics
-	m.baseMetrics = map[string]*BaseMetrics{}
+	// Create a waiting group and a buffered channel to store data from goroutines
+	var wg sync.WaitGroup
+	wg.Add(len(m.id))
+	results := make(chan *BaseMetrics, len(m.id))
+
 	for _, id := range m.id {
-		m.baseMetrics[id] = m.getBaseMetrics(dockerClient, id)
+		go m.getBaseMetrics(dockerClient, id, &wg, results)
 	}
 
+	wg.Wait()
+	close(results)
+
+	// Initialize the metrics structure
+	m.baseMetrics = map[string]*BaseMetrics{}
+
+	// Fill the map with values
+	for r := range results {
+		m.baseMetrics[r.id] = r
+	}
+
+	// Create x2 groups
+	wg.Add(len(m.id) * 2)
+	logResults := make(chan *LogMetric, len(m.id)*2)
+
 	// Get a list of custom metrics from logs
-	m.logMetrics = map[string]*LogMetrics{}
 	for _, id := range m.id {
-		stdout := m.getLogsCount(dockerClient, id, true, false)
-		stderr := m.getLogsCount(dockerClient, id, false, true)
-		stdall := stdout + stderr
-		var lm LogMetrics = LogMetrics{
-			stdout: stdout,
-			stderr: stderr,
-			stdall: stdall,
+		go m.getLogsCount(dockerClient, id, true, false, &wg, logResults)
+		go m.getLogsCount(dockerClient, id, false, true, &wg, logResults)
+	}
+
+	wg.Wait()
+	close(logResults)
+
+	// Get metrics from logs
+	m.logMetrics = map[string]*LogMetrics{}
+	for lr := range logResults {
+		if m.logMetrics[lr.id] == nil {
+			m.logMetrics[lr.id] = &LogMetrics{}
 		}
-		m.logMetrics[id] = &lm
+		if lr.stdout {
+			m.logMetrics[lr.id].stdout = lr.value
+		} else {
+			m.logMetrics[lr.id].stderr = lr.value
+		}
+	}
+
+	// Filling the sum of the streams
+	for _, id := range m.id {
+		m.logMetrics[id].stdall = m.logMetrics[id].stdout + m.logMetrics[id].stderr
 	}
 
 	// Debug output main structure
@@ -427,6 +484,7 @@ func main() {
 	}
 	defer dockerClient.Close()
 
+	// Create HTTP server
 	httpServerMux := http.NewServeMux()
 
 	// Endpoint: /metrics
