@@ -61,19 +61,25 @@ type LogMetric struct {
 }
 
 // Get information about all containers (second param to get all or only started containers)
-func (m *Metrics) getContainers(dockerClient *client.Client, All bool) (map[string]*Info, []string, int) {
+func (m *Metrics) getContainers(dockerClient *client.Client, All bool) (map[string]*Info, []string, int, int) {
 	containers, err := dockerClient.ContainerList(context.Background(), container.ListOptions{All: All})
 	if err != nil {
 		panic(err)
 	}
 	containersUp := 0
+	containersDown := 0
 	info := map[string]*Info{}
 	var idArr []string
 	for _, container := range containers {
 		// Debug output container info
 		// godump.Dump(container)
 		// Counting the number of running containers
-		containersUp++
+		if container.State == "running" {
+			containersUp++
+		} else {
+			containersDown++
+			continue
+		}
 		// Fills the info structure
 		i := Info{}
 		currentId := container.ID
@@ -84,7 +90,7 @@ func (m *Metrics) getContainers(dockerClient *client.Client, All bool) (map[stri
 		// Fills an array of container id
 		idArr = append(idArr, currentId)
 	}
-	return info, idArr, containersUp
+	return info, idArr, containersUp, containersDown
 }
 
 // Get metric list for specified container by id
@@ -267,12 +273,9 @@ func (m *Metrics) prometheusFormat(metricName, helpText, typeData, id, container
 }
 
 // Getting all metrics in Prometheus format
-func (m *Metrics) prometheusMetrics(id string) []string {
+func (m *Metrics) prometheusMetrics(id string, hostname string) []string {
 	// Main text slice
 	var prometheusMetrics []string
-
-	// Get hostname
-	hostname, _ := os.Hostname()
 
 	// Get container name
 	containerName := m.info[id].name
@@ -396,7 +399,7 @@ func (m *Metrics) prometheusMetrics(id string) []string {
 // Main function for getting metrics
 func (m *Metrics) getMetrics(dockerClient *client.Client) []string {
 	// Get a list of containers with status information and all container ID array
-	m.info, m.id, m.containersUp = m.getContainers(dockerClient, false)
+	m.info, m.id, m.containersUp, m.containersDown = m.getContainers(dockerClient, true)
 
 	// Create a waiting group and a buffered channel to store data from goroutines
 	var wg sync.WaitGroup
@@ -454,8 +457,23 @@ func (m *Metrics) getMetrics(dockerClient *client.Client) []string {
 
 	// Get metrics in Prometheus format
 	var prometheusMetrics []string
+
+	hostname, _ := os.Hostname()
+
+	prometheusMetrics = append(prometheusMetrics, "# HELP docker_containers_up_count Number of running containers")
+	prometheusMetrics = append(prometheusMetrics, "# TYPE docker_containers_up_count gauge")
+	metricText := fmt.Sprintf("docker_containers_up_count{hostname=\"%s\"} %v", hostname, m.containersUp)
+	prometheusMetrics = append(prometheusMetrics, metricText)
+
+	prometheusMetrics = append(prometheusMetrics, "# HELP docker_containers_down_count Number of stopped containers")
+	prometheusMetrics = append(prometheusMetrics, "# TYPE docker_containers_down_count gauge")
+	metricText = fmt.Sprintf("docker_containers_down_count{hostname=\"%s\"} %v", hostname, m.containersDown)
+	prometheusMetrics = append(prometheusMetrics, metricText)
+
+	prometheusMetrics = append(prometheusMetrics, "")
+
 	for _, id := range m.id {
-		prometheusMetrics = append(prometheusMetrics, m.prometheusMetrics(id)...)
+		prometheusMetrics = append(prometheusMetrics, m.prometheusMetrics(id, hostname)...)
 	}
 
 	return prometheusMetrics
@@ -500,7 +518,7 @@ func main() {
 	logSrv := loggingMiddleware(httpServerMux)
 
 	// Start HTTP server
-	err = http.ListenAndServe(":8080", logSrv)
+	err = http.ListenAndServe(":9333", logSrv)
 	if err != nil {
 		log.Fatal(err)
 	}
