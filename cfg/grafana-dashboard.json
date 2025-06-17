@@ -15,12 +15,29 @@
       }
     ]
   },
-  "description": "https://github.com/Lifailon/logporter",
+  "description": "Source code: https://github.com/Lifailon/logporter",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 7,
-  "links": [],
+  "links": [
+    {
+      "icon": "external link",
+      "tags": [],
+      "targetBlank": true,
+      "title": "GitHub",
+      "type": "link",
+      "url": "https://github.com/Lifailon/logporter"
+    },
+    {
+      "icon": "external link",
+      "tags": [],
+      "targetBlank": true,
+      "title": "Docker Hub",
+      "type": "link",
+      "url": "https://hub.docker.com/r/lifailon/logporter"
+    }
+  ],
   "panels": [
     {
       "collapsed": false,
@@ -101,7 +118,7 @@
         "type": "prometheus",
         "uid": "feouoimx64v0ge"
       },
-      "description": "",
+      "description": "Total cpu usage of all containers",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -156,7 +173,7 @@
           "refId": "A"
         }
       ],
-      "title": "CPU Sum Usage",
+      "title": "CPU Total Usage",
       "type": "stat"
     },
     {
@@ -164,6 +181,7 @@
         "type": "prometheus",
         "uid": "feouoimx64v0ge"
       },
+      "description": "Total memory usage of all containers",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -179,7 +197,7 @@
               }
             ]
           },
-          "unit": "decmbytes"
+          "unit": "decbytes"
         },
         "overrides": []
       },
@@ -212,7 +230,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(docker_memory_usage{hostname=~\"$HostName\"})/1024/1024",
+          "expr": "sum(docker_memory_usage{hostname=~\"$HostName\"})",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -226,6 +244,7 @@
         "type": "prometheus",
         "uid": "feouoimx64v0ge"
       },
+      "description": "Total network usage of all containers",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -592,6 +611,7 @@
         "type": "prometheus",
         "uid": "feouoimx64v0ge"
       },
+      "description": "Total memory usage of all containers relative to the maximum value per one container",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -640,7 +660,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "(sum(docker_memory_usage{hostname=~\"$HostName\"}))/(sum(docker_memory_total{hostname=~\"$HostName\"}))",
+          "expr": "(sum(docker_memory_usage{hostname=~\"$HostName\"}))/(max(docker_memory_total{hostname=~\"$HostName\"}))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -654,6 +674,7 @@
         "type": "prometheus",
         "uid": "feouoimx64v0ge"
       },
+      "description": "Maximum memory per one container",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -669,7 +690,7 @@
               }
             ]
           },
-          "unit": "decmbytes"
+          "unit": "decbytes"
         },
         "overrides": []
       },
@@ -702,13 +723,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(docker_memory_total{hostname=~\"$HostName\"})/1024/1024",
+          "expr": "max(docker_memory_total{hostname=~\"$HostName\"})",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Memory Total ",
+      "title": "Memory Total",
       "type": "stat"
     },
     {
@@ -716,7 +737,7 @@
         "type": "prometheus",
         "uid": "feouoimx64v0ge"
       },
-      "description": "Storage (disk)",
+      "description": "Total storage (disk) usage of all containers",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -793,7 +814,7 @@
         "type": "prometheus",
         "uid": "feouoimx64v0ge"
       },
-      "description": "Total = User + Kernel",
+      "description": "User + Kernel = Total",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1723,7 +1744,7 @@
       "type": "row"
     },
     {
-      "collapsed": false,
+      "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -1731,474 +1752,236 @@
         "y": 31
       },
       "id": 29,
-      "panels": [],
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "feouoimx64v0ge"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineStyle": {
+                  "fill": "solid"
+                },
+                "lineWidth": 2,
+                "pointSize": 1,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green"
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 0,
+            "y": 32
+          },
+          "id": 27,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "min",
+                "max",
+                "mean",
+                "p95"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "12.0.1+security-01",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "feouoimx64v0ge"
+              },
+              "disableTextWrap": false,
+              "editorMode": "code",
+              "exemplar": false,
+              "expr": "rate(docker_cpu_usage_user{containerName=~\"$ContainerName\",hostname=~\"$HostName\"}[$__rate_interval]) * 100",
+              "fullMetaSearch": false,
+              "includeNullMetadata": true,
+              "instant": false,
+              "interval": "",
+              "legendFormat": "{{containerName}} ({{hostname}})",
+              "range": true,
+              "refId": "A",
+              "useBackend": false
+            }
+          ],
+          "title": "CPU User Usage",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "feouoimx64v0ge"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineStyle": {
+                  "fill": "solid"
+                },
+                "lineWidth": 2,
+                "pointSize": 1,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green"
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 12,
+            "y": 32
+          },
+          "id": 28,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "min",
+                "max",
+                "mean",
+                "p95"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "12.0.1+security-01",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "feouoimx64v0ge"
+              },
+              "disableTextWrap": false,
+              "editorMode": "code",
+              "exemplar": false,
+              "expr": "rate(docker_cpu_usage_kernel{containerName=~\"$ContainerName\",hostname=~\"$HostName\"}[$__rate_interval]) * 100",
+              "fullMetaSearch": false,
+              "includeNullMetadata": true,
+              "instant": false,
+              "interval": "",
+              "legendFormat": "{{containerName}} ({{hostname}})",
+              "range": true,
+              "refId": "A",
+              "useBackend": false
+            }
+          ],
+          "title": "CPU Kernel Usage",
+          "type": "timeseries"
+        }
+      ],
       "title": "CPU User and Kernel",
       "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "feouoimx64v0ge"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineStyle": {
-              "fill": "solid"
-            },
-            "lineWidth": 2,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 32
-      },
-      "id": 27,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull",
-            "min",
-            "max",
-            "mean",
-            "p95"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.1+security-01",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "feouoimx64v0ge"
-          },
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "rate(docker_cpu_usage_user{containerName=~\"$ContainerName\",hostname=~\"$HostName\"}[$__rate_interval]) * 100",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "interval": "",
-          "legendFormat": "{{containerName}} ({{hostname}})",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        }
-      ],
-      "title": "CPU User Usage",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "feouoimx64v0ge"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineStyle": {
-              "fill": "solid"
-            },
-            "lineWidth": 2,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 32
-      },
-      "id": 28,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull",
-            "min",
-            "max",
-            "mean",
-            "p95"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.1+security-01",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "feouoimx64v0ge"
-          },
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "rate(docker_cpu_usage_kernel{containerName=~\"$ContainerName\",hostname=~\"$HostName\"}[$__rate_interval]) * 100",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "interval": "",
-          "legendFormat": "{{containerName}} ({{hostname}})",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        }
-      ],
-      "title": "CPU Kernel Usage",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 41
-      },
-      "id": 20,
-      "panels": [],
-      "title": "Network Packages",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "feouoimx64v0ge"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineStyle": {
-              "fill": "solid"
-            },
-            "lineWidth": 2,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "pps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 42
-      },
-      "id": 21,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull",
-            "min",
-            "max",
-            "mean",
-            "p95"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.1+security-01",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "feouoimx64v0ge"
-          },
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "rate(docker_network_received_packages{containerName=~\"$ContainerName\",hostname=~\"$HostName\"}[$__rate_interval])",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "interval": "",
-          "legendFormat": "{{containerName}} ({{hostname}})",
-          "range": true,
-          "refId": "B",
-          "useBackend": false
-        }
-      ],
-      "title": "Network Received Packages",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "feouoimx64v0ge"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineStyle": {
-              "fill": "solid"
-            },
-            "lineWidth": 2,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "pps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 42
-      },
-      "id": 22,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull",
-            "min",
-            "max",
-            "mean",
-            "p95"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.1+security-01",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "feouoimx64v0ge"
-          },
-          "disableTextWrap": false,
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "rate(docker_network_transmit_packages{containerName=~\"$ContainerName\",hostname=~\"$HostName\"}[$__rate_interval])",
-          "fullMetaSearch": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "interval": "",
-          "legendFormat": "{{containerName}} ({{hostname}})",
-          "range": true,
-          "refId": "B",
-          "useBackend": false
-        }
-      ],
-      "title": "Network Transmit Packages",
-      "type": "timeseries"
     },
     {
       "collapsed": true,
@@ -2206,7 +1989,247 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 50
+        "y": 32
+      },
+      "id": 20,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "feouoimx64v0ge"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineStyle": {
+                  "fill": "solid"
+                },
+                "lineWidth": 2,
+                "pointSize": 1,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green"
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "pps"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 33
+          },
+          "id": 21,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "min",
+                "max",
+                "mean",
+                "p95"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "12.0.1+security-01",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "feouoimx64v0ge"
+              },
+              "disableTextWrap": false,
+              "editorMode": "code",
+              "exemplar": false,
+              "expr": "rate(docker_network_received_packages{containerName=~\"$ContainerName\",hostname=~\"$HostName\"}[$__rate_interval])",
+              "fullMetaSearch": false,
+              "includeNullMetadata": true,
+              "instant": false,
+              "interval": "",
+              "legendFormat": "{{containerName}} ({{hostname}})",
+              "range": true,
+              "refId": "B",
+              "useBackend": false
+            }
+          ],
+          "title": "Network Received Packages",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "feouoimx64v0ge"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineStyle": {
+                  "fill": "solid"
+                },
+                "lineWidth": 2,
+                "pointSize": 1,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green"
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "pps"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 33
+          },
+          "id": 22,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull",
+                "min",
+                "max",
+                "mean",
+                "p95"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "12.0.1+security-01",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "feouoimx64v0ge"
+              },
+              "disableTextWrap": false,
+              "editorMode": "code",
+              "exemplar": false,
+              "expr": "rate(docker_network_transmit_packages{containerName=~\"$ContainerName\",hostname=~\"$HostName\"}[$__rate_interval])",
+              "fullMetaSearch": false,
+              "includeNullMetadata": true,
+              "instant": false,
+              "interval": "",
+              "legendFormat": "{{containerName}} ({{hostname}})",
+              "range": true,
+              "refId": "B",
+              "useBackend": false
+            }
+          ],
+          "title": "Network Transmit Packages",
+          "type": "timeseries"
+        }
+      ],
+      "title": "Network Packages",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 33
       },
       "id": 37,
       "panels": [
@@ -2327,7 +2350,7 @@
     }
   ],
   "preload": false,
-  "refresh": "auto",
+  "refresh": "5s",
   "schemaVersion": 41,
   "tags": [
     "Docker"
@@ -2338,10 +2361,12 @@
         "allowCustomValue": false,
         "current": {
           "text": [
+            "logporter",
             "go-playground",
             "lazyjournal"
           ],
           "value": [
+            "logporter",
             "go-playground",
             "lazyjournal"
           ]
@@ -2364,10 +2389,10 @@
         "allowCustomValue": false,
         "current": {
           "text": [
-            "plex-01"
+            "d12dbb8d7125"
           ],
           "value": [
-            "plex-01"
+            "d12dbb8d7125"
           ]
         },
         "definition": "query_result(group by(hostname) (docker_cpu_usage_total))",
@@ -2386,11 +2411,12 @@
     ]
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-5m",
     "to": "now"
   },
   "timepicker": {
     "refresh_intervals": [
+      "5s",
       "10s",
       "15s",
       "30s",
@@ -2400,5 +2426,5 @@
   "timezone": "browser",
   "title": "Containers Exporter (logporter)",
   "uid": "4e7bc3e2-5217-4aaa-82bd-fe7a5f873c57",
-  "version": 26
+  "version": 31
 }
