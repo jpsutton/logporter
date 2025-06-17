@@ -284,21 +284,21 @@ func (m *Metrics) prometheusMetrics(id string, hostname string) []string {
 	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
 		"docker_cpu_usage_total",
 		"Total CPU usage (user and kernel) in seconds",
-		"gauge", id, containerName, hostname,
+		"counter", id, containerName, hostname,
 		m.baseMetrics[id].cpuTotal,
 	)...)
 
 	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
 		"docker_cpu_usage_user",
 		"User CPU usage in seconds",
-		"gauge", id, containerName, hostname,
+		"counter", id, containerName, hostname,
 		m.baseMetrics[id].cpuUser,
 	)...)
 
 	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
 		"docker_cpu_usage_kernel",
 		"Kernel CPU usage in seconds",
-		"gauge", id, containerName, hostname,
+		"counter", id, containerName, hostname,
 		m.baseMetrics[id].cpuKernel,
 	)...)
 
