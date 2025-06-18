@@ -19,10 +19,9 @@ A simple alternative to [cAdvisor](https://github.com/google/cadvisor) for getti
 - [X] Building a Docker image
 - [ ] Testing
 
-### Install
+## Install
 
-<!-- - Download the image from Docker Hub or build it yourself (optional): -->
-- Build Docker image:
+- Download the image from Docker Hub or build it yourself (optional):
 
 ```bash
 git clone https://github.com/Lifailon/logporter
