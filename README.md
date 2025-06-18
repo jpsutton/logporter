@@ -1,13 +1,6 @@
 # logporter
 
-A simple alternative to [cAdvisor](https://github.com/google/cadvisor) for getting basic Docker container metrics as well as custom metrics (e.g. number of logged messages).
-
-![](/img/basic-metrics.jpg)
-
-![](/img/other-metrics.jpg)
-
-> [!IMPORTANT]
-> If you notice an bug in `PromQL` queries in the Grafana Dashboard, please open an new [Issue](https://github.com/Lifailon/logporter/issues) or make the change yourself using a [Pull Request](https://github.com/Lifailon/logporter/pulls).
+A simple alternative to [cAdvisor](https://github.com/google/cadvisor) for getting basic Docker container metrics as well as custom metrics (e.g. container uptime and number of logged messages).
 
 ## Why collect log counts?
 
@@ -23,16 +16,31 @@ A simple alternative to [cAdvisor](https://github.com/google/cadvisor) for getti
 - [X] Error handling (check for missing data)
 - [X] Getting data in a goroutine
 - [X] Grafana Dashboard
-- [ ] Building a Docker Image
+- [X] Building a Docker image
 - [ ] Testing
 
 ### Install
 
-- Download the image from Docker Hub and run the exporter in the container:
+<!-- - Download the image from Docker Hub or build it yourself (optional): -->
+- Build Docker image:
 
-``
+```bash
+git clone https://github.com/Lifailon/logporter
+cd logporter
+docker build -t logporter:latest .
+```
 
-- Connect the new endpoint to the Prometheus configuration:
+- Run the exporter in the container:
+
+```bash
+docker run -d --name logporter \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -p 9333:9333 \
+  --restart=unless-stopped \
+  logporter:latest
+```
+
+- Connect the new target in the `prometheus.yml` configuration:
 
 ```yml
 scrape_configs:
@@ -45,3 +53,10 @@ scrape_configs:
 ```
 
 - Import the prepared [Dashboard](cfg/grafana-dashboard.json) into Grafana.
+
+> [!IMPORTANT]
+> If you notice an bug in `PromQL` queries in the Grafana Dashboard, please open an new [Issue](https://github.com/Lifailon/logporter/issues) or make the change yourself using a [Pull Request](https://github.com/Lifailon/logporter/pulls).
+
+![](/img/basic-metrics.jpg)
+
+![](/img/other-metrics.jpg)
