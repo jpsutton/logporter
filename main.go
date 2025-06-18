@@ -23,6 +23,7 @@ type Metrics struct {
 	info           map[string]*Info
 	baseMetrics    map[string]*BaseMetrics
 	logMetrics     map[string]*LogMetrics
+	inspectMetrics map[string]float64
 }
 
 type Info struct {
@@ -58,6 +59,11 @@ type LogMetric struct {
 	stdout bool
 	stderr bool
 	value  int
+}
+
+type InspectMetric struct {
+	id          string
+	startedDate float64
 }
 
 // Get information about all containers (second param to get all or only started containers)
@@ -116,7 +122,7 @@ func (m *Metrics) getBaseMetrics(dockerClient *client.Client, id string, wg *syn
 		panic(err)
 	}
 
-	// Debug output metrics
+	// Debug output metrics from stats
 	// godump.Dump(data)
 
 	// Extract data and fill structure
@@ -257,6 +263,31 @@ func (m *Metrics) getLogsCount(dockerClient *client.Client, id string, stdout bo
 	results <- &logMetric
 }
 
+// Get metrics from inspect method
+func (m *Metrics) getInspect(dockerClient *client.Client, id string, wg *sync.WaitGroup, results chan *InspectMetric) {
+	inspect, err := dockerClient.ContainerInspect(context.Background(), id)
+	if err != nil {
+		panic(err)
+	}
+	// Debug output inspect data
+	// godump.Dump(inspect)
+	// Get started time
+	startedDate := inspect.State.StartedAt
+	// Converting string to time type
+	startedTime, err := time.Parse(time.RFC3339Nano, startedDate)
+	if err != nil {
+		panic(err)
+	}
+	// Converting to timestamp
+	startedTimestamp := float64(startedTime.Unix())
+	data := InspectMetric{
+		id:          id,
+		startedDate: startedTimestamp,
+	}
+	defer wg.Done()
+	results <- &data
+}
+
 // Converting metrics to Prometheus format
 func (m *Metrics) prometheusFormat(metricName, helpText, typeData, id, containerName, hostname string, value any) []string {
 	var metricsText []string
@@ -275,27 +306,27 @@ func (m *Metrics) prometheusFormat(metricName, helpText, typeData, id, container
 // Getting all metrics in Prometheus format
 func (m *Metrics) prometheusMetrics(id string, hostname string) []string {
 	// Main text slice
-	var prometheusMetrics []string
+	var data []string
 
 	// Get container name
 	containerName := m.info[id].name
 
 	// Processor
-	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
+	data = append(data, m.prometheusFormat(
 		"docker_cpu_usage_total",
 		"Total CPU usage (user and kernel) in seconds",
 		"counter", id, containerName, hostname,
 		m.baseMetrics[id].cpuTotal,
 	)...)
 
-	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
+	data = append(data, m.prometheusFormat(
 		"docker_cpu_usage_user",
 		"User CPU usage in seconds",
 		"counter", id, containerName, hostname,
 		m.baseMetrics[id].cpuUser,
 	)...)
 
-	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
+	data = append(data, m.prometheusFormat(
 		"docker_cpu_usage_kernel",
 		"Kernel CPU usage in seconds",
 		"counter", id, containerName, hostname,
@@ -303,14 +334,14 @@ func (m *Metrics) prometheusMetrics(id string, hostname string) []string {
 	)...)
 
 	// Memory
-	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
+	data = append(data, m.prometheusFormat(
 		"docker_memory_total",
 		"Total memory size in bytes",
 		"gauge", id, containerName, hostname,
 		m.baseMetrics[id].memTotalBtyes,
 	)...)
 
-	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
+	data = append(data, m.prometheusFormat(
 		"docker_memory_usage",
 		"Usage memory size in bytes",
 		"gauge", id, containerName, hostname,
@@ -318,28 +349,28 @@ func (m *Metrics) prometheusMetrics(id string, hostname string) []string {
 	)...)
 
 	// Network
-	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
+	data = append(data, m.prometheusFormat(
 		"docker_network_received_bytes",
 		"Number of bytes received on the network",
 		"counter", id, containerName, hostname,
 		m.baseMetrics[id].netReceiveBytes,
 	)...)
 
-	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
+	data = append(data, m.prometheusFormat(
 		"docker_network_received_packages",
 		"Number of packages received on the network",
 		"counter", id, containerName, hostname,
 		m.baseMetrics[id].netReceivePackets,
 	)...)
 
-	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
+	data = append(data, m.prometheusFormat(
 		"docker_network_transmit_bytes",
 		"Number of bytes transmitted on the network",
 		"counter", id, containerName, hostname,
 		m.baseMetrics[id].netTransmitBytes,
 	)...)
 
-	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
+	data = append(data, m.prometheusFormat(
 		"docker_network_transmit_packages",
 		"Number of packages transmitted on the network",
 		"counter", id, containerName, hostname,
@@ -347,14 +378,14 @@ func (m *Metrics) prometheusMetrics(id string, hostname string) []string {
 	)...)
 
 	// IO
-	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
+	data = append(data, m.prometheusFormat(
 		"docker_io_read_bytes",
 		"Number of bytes read by the block device",
 		"counter", id, containerName, hostname,
 		m.baseMetrics[id].ioReadBytes,
 	)...)
 
-	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
+	data = append(data, m.prometheusFormat(
 		"docker_io_write_bytes",
 		"Number of bytes write by the block device",
 		"counter", id, containerName, hostname,
@@ -362,7 +393,7 @@ func (m *Metrics) prometheusMetrics(id string, hostname string) []string {
 	)...)
 
 	// PIDs
-	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
+	data = append(data, m.prometheusFormat(
 		"docker_process_pids_count",
 		"Number of running processes and threads",
 		"gauge", id, containerName, hostname,
@@ -370,30 +401,38 @@ func (m *Metrics) prometheusMetrics(id string, hostname string) []string {
 	)...)
 
 	// Logs
-	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
+	data = append(data, m.prometheusFormat(
 		"docker_logs_stdout_count",
 		"Number of logs from stdout stream in the last 10 seconds",
 		"counter", id, containerName, hostname,
 		m.logMetrics[id].stdout,
 	)...)
 
-	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
+	data = append(data, m.prometheusFormat(
 		"docker_logs_stderr_count",
 		"Number of logs from stderr stream in the last 10 seconds",
 		"counter", id, containerName, hostname,
 		m.logMetrics[id].stderr,
 	)...)
 
-	prometheusMetrics = append(prometheusMetrics, m.prometheusFormat(
+	data = append(data, m.prometheusFormat(
 		"docker_logs_all_count",
 		"Number of logs from all stream in the last 10 seconds",
 		"counter", id, containerName, hostname,
 		m.logMetrics[id].stdall,
 	)...)
 
-	prometheusMetrics = append(prometheusMetrics, "")
+	// Started time
+	data = append(data, m.prometheusFormat(
+		"docker_started_time",
+		"Container started time",
+		"gauge", id, containerName, hostname,
+		m.inspectMetrics[id],
+	)...)
 
-	return prometheusMetrics
+	data = append(data, "")
+
+	return data
 }
 
 // Main function for getting metrics
@@ -452,31 +491,47 @@ func (m *Metrics) getMetrics(dockerClient *client.Client) []string {
 		m.logMetrics[id].stdall = m.logMetrics[id].stdout + m.logMetrics[id].stderr
 	}
 
+	// Get start time containers
+	wg.Add(len(m.id))
+	inspectData := make(chan *InspectMetric, len(m.id))
+
+	for _, id := range m.id {
+		m.getInspect(dockerClient, id, &wg, inspectData)
+	}
+
+	wg.Wait()
+	close(inspectData)
+
+	m.inspectMetrics = map[string]float64{}
+	for data := range inspectData {
+		m.inspectMetrics[data.id] = data.startedDate
+	}
+
 	// Debug output main structure
-	// godump.Dump(metrics)
+	// godump.Dump(m)
 
 	// Get metrics in Prometheus format
-	var prometheusMetrics []string
+	var data []string
 
 	hostname, _ := os.Hostname()
 
-	prometheusMetrics = append(prometheusMetrics, "# HELP docker_containers_up_count Number of running containers")
-	prometheusMetrics = append(prometheusMetrics, "# TYPE docker_containers_up_count gauge")
+	data = append(data, "# HELP docker_containers_up_count Number of running containers")
+	data = append(data, "# TYPE docker_containers_up_count gauge")
 	metricText := fmt.Sprintf("docker_containers_up_count{hostname=\"%s\"} %v", hostname, m.containersUp)
-	prometheusMetrics = append(prometheusMetrics, metricText)
+	data = append(data, metricText)
 
-	prometheusMetrics = append(prometheusMetrics, "# HELP docker_containers_down_count Number of stopped containers")
-	prometheusMetrics = append(prometheusMetrics, "# TYPE docker_containers_down_count gauge")
+	data = append(data, "# HELP docker_containers_down_count Number of stopped containers")
+	data = append(data, "# TYPE docker_containers_down_count gauge")
 	metricText = fmt.Sprintf("docker_containers_down_count{hostname=\"%s\"} %v", hostname, m.containersDown)
-	prometheusMetrics = append(prometheusMetrics, metricText)
+	data = append(data, metricText)
 
-	prometheusMetrics = append(prometheusMetrics, "")
+	data = append(data, "")
 
 	for _, id := range m.id {
-		prometheusMetrics = append(prometheusMetrics, m.prometheusMetrics(id, hostname)...)
+		data = append(data, m.prometheusMetrics(id, hostname)...)
 	}
 
-	return prometheusMetrics
+	return data
 }
 
 // Logging http server requests
@@ -508,9 +563,9 @@ func main() {
 	// Endpoint: /metrics
 	httpServerMux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
-		prometheusMetrics := metrics.getMetrics(dockerClient)
+		metricsData := metrics.getMetrics(dockerClient)
 		// Output metrics in Prometheus format
-		for _, m := range prometheusMetrics {
+		for _, m := range metricsData {
 			fmt.Fprintln(w, m)
 		}
 	})
