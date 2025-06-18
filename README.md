@@ -1,6 +1,6 @@
 # logporter
 
-A simple alternative to [cAdvisor](https://github.com/google/cadvisor) for getting basic Docker container metrics as well as custom metrics (e.g. container uptime and number of logged messages).
+A simple and lightweight alternative to [cAdvisor](https://github.com/google/cadvisor) for getting basic Docker container metrics as well as custom metrics (e.g. container uptime and number of logged messages).
 
 ## Why collect log counts?
 
@@ -16,17 +16,17 @@ A simple alternative to [cAdvisor](https://github.com/google/cadvisor) for getti
 - [X] Error handling (check for missing data)
 - [X] Getting data in a goroutine
 - [X] Grafana Dashboard
-- [X] Building a Docker image
+- [X] Docker image
 - [ ] Testing
 
 ## Install
 
-- Download the image from Docker Hub or build it yourself (optional):
+- Download the image from [Docker Hub](https://hub.docker.com/r/lifailon/logporter) or build it yourself (optional):
 
 ```bash
 git clone https://github.com/Lifailon/logporter
 cd logporter
-docker build -t logporter:latest .
+docker build -t lifailon/logporter .
 ```
 
 - Run the exporter in the container:
@@ -36,7 +36,7 @@ docker run -d --name logporter \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -p 9333:9333 \
   --restart=unless-stopped \
-  logporter:latest
+  lifailon/logporter:latest
 ```
 
 - Connect the new target in the `prometheus.yml` configuration:
@@ -54,7 +54,7 @@ scrape_configs:
 - Import the prepared [Dashboard](cfg/grafana-dashboard.json) into Grafana.
 
 > [!IMPORTANT]
-> If you notice an bug in `PromQL` queries in the Grafana Dashboard, please open an new [Issue](https://github.com/Lifailon/logporter/issues) or make the change yourself using a [Pull Request](https://github.com/Lifailon/logporter/pulls).
+> If you notice a bug in `PromQL` queries or want to improve the Grafana dashboard, create a new [issue](https://github.com/Lifailon/logporter/issues) or make the changes yourself using a [Pull Request](https://github.com/Lifailon/logporter/pulls).
 
 ![](/img/basic-metrics.jpg)
 
