@@ -51,7 +51,7 @@ scrape_configs:
         - localhost:9333
 ```
 
-- Import the prepared [Dashboard](cfg/grafana-dashboard.json) into Grafana.
+- Import the prepared public [Grafana Dashboard](https://grafana.com/grafana/dashboards/23573-docker-exporter-logporter) using the id `23573` or from a [json](https://github.com/Lifailon/logporter/blob/main/cfg/grafana-dashboard.json) file.
 
 > [!IMPORTANT]
 > If you notice a bug in `PromQL` queries or want to improve the Grafana dashboard, create a new [issue](https://github.com/Lifailon/logporter/issues) or make the changes yourself using a [Pull Request](https://github.com/Lifailon/logporter/pulls).
