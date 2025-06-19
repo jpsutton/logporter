@@ -19,17 +19,21 @@ A simple and lightweight alternative to [cAdvisor](https://github.com/google/cad
 - [X] Docker image
 - [ ] Testing
 
-## Install
+## Build
 
-- Download the image from [Docker Hub](https://hub.docker.com/r/lifailon/logporter) or build it yourself (optional):
+Build the Docker image yourself (optional):
 
 ```bash
 git clone https://github.com/Lifailon/logporter
 cd logporter
 docker build -t lifailon/logporter .
+# or build for different architectures
+docker buildx build --platform linux/amd64,linux/arm64 .
 ```
 
-- Run the exporter in the container:
+## Install
+
+- Run the exporter in a container using an image from [Docker Hub](https://hub.docker.com/r/lifailon):
 
 ```bash
 docker run -d --name logporter \
