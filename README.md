@@ -1,6 +1,6 @@
 # logporter
 
-A simple and lightweight alternative to [cAdvisor](https://github.com/google/cadvisor) for getting basic Docker container metrics as well as custom metrics (e.g. container uptime and number of logged messages).
+A simple and lightweight alternative to [cAdvisor](https://github.com/google/cadvisor) for getting basic and custom Docker containers metrics (e.g. container uptime and number of logged messages).
 
 ## Why collect log counts?
 
@@ -33,7 +33,7 @@ docker buildx build --platform linux/amd64,linux/arm64 .
 
 ## Install
 
-- Run the exporter in a container using an image from [Docker Hub](https://hub.docker.com/r/lifailon):
+- Run the exporter in a container using an image from [Docker Hub](https://hub.docker.com/r/lifailon/logporter):
 
 ```bash
 docker run -d --name logporter \
@@ -48,8 +48,8 @@ docker run -d --name logporter \
 ```yml
 scrape_configs:
   - job_name: logporter
-    scrape_interval: 5s
-    scrape_timeout: 5s
+    scrape_interval: 10s
+    scrape_timeout: 10s
     static_configs:
       - targets:
         - localhost:9333
