@@ -443,7 +443,7 @@ func (m *Metrics) prometheusMetrics(id string, hostname string) []string {
 }
 
 // Main function for getting metrics
-func (m *Metrics) getMetrics(dockerClient *client.Client) []string {
+func (m *Metrics) getMetrics(dockerClient *client.Client, hostname string) []string {
 	// Get a list of containers with status information and all container ID array
 	m.info, m.id, m.containersUp, m.containersDown = m.getContainers(dockerClient, true)
 
@@ -534,8 +534,6 @@ func (m *Metrics) getMetrics(dockerClient *client.Client) []string {
 	// Get metrics in Prometheus format
 	var data []string
 
-	hostname, _ := os.Hostname()
-
 	data = append(data, "# HELP docker_containers_up_count Number of running containers")
 	data = append(data, "# TYPE docker_containers_up_count gauge")
 	metricText := fmt.Sprintf("docker_containers_up_count{hostname=\"%s\"} %v", hostname, m.containersUp)
@@ -567,6 +565,15 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	return log
 }
 
+// Get hostname from Docker Info method
+func (m *Metrics) getDockerInfo(dockerClient *client.Client) string {
+	info, err := dockerClient.Info(context.Background())
+	if err != nil {
+		log.Println("Failed to get hostname: %w", err)
+	}
+	return info.Name
+}
+
 func main() {
 	// Initialize the main structure
 	var metrics *Metrics = &Metrics{}
@@ -590,13 +597,17 @@ func main() {
 	}
 	defer dockerClient.Close()
 
+	// Get hostname
+	// hostname, _ := os.Hostname()
+	hostname := metrics.getDockerInfo(dockerClient)
+
 	// Create HTTP server
 	httpServerMux := http.NewServeMux()
 
 	// Endpoint: /metrics
 	httpServerMux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
-		metricsData := metrics.getMetrics(dockerClient)
+		metricsData := metrics.getMetrics(dockerClient, hostname)
 		// Output metrics in Prometheus format
 		for _, m := range metricsData {
 			fmt.Fprintln(w, m)
