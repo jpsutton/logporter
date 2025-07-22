@@ -24,6 +24,7 @@ type Metrics struct {
 	baseMetrics    map[string]*BaseMetrics
 	logMetrics     map[string]*LogMetrics
 	inspectMetrics map[string]float64
+	maxWorkers     int
 }
 
 type Info struct {
@@ -70,7 +71,8 @@ type InspectMetric struct {
 func (m *Metrics) getContainers(dockerClient *client.Client, All bool) (map[string]*Info, []string, int, int) {
 	containers, err := dockerClient.ContainerList(context.Background(), container.ListOptions{All: All})
 	if err != nil {
-		panic(err)
+		log.Println("Failed to get container list: %w", err)
+		return nil, nil, 0, 0
 	}
 	containersUp := 0
 	containersDown := 0
@@ -100,17 +102,19 @@ func (m *Metrics) getContainers(dockerClient *client.Client, All bool) (map[stri
 }
 
 // Get metric list for specified container by id
-func (m *Metrics) getBaseMetrics(dockerClient *client.Client, id string, wg *sync.WaitGroup, results chan *BaseMetrics) {
+func (m *Metrics) getBaseMetrics(dockerClient *client.Client, id string, results chan *BaseMetrics) {
 	stats, err := dockerClient.ContainerStats(context.Background(), id, false)
 	if err != nil {
-		panic(err)
+		log.Println("Failed to get container stats: %w", err)
+		return
 	}
 	defer stats.Body.Close()
 
 	// Read statistics
 	jsonStats, err := io.ReadAll(stats.Body)
 	if err != nil {
-		panic(err)
+		log.Println("Failed to read container stats: %w", err)
+		return
 	}
 
 	// Create a map to extract data from json
@@ -119,7 +123,7 @@ func (m *Metrics) getBaseMetrics(dockerClient *client.Client, id string, wg *syn
 	// Parsing json and fill in map
 	err = json.Unmarshal(jsonStats, &data)
 	if err != nil {
-		panic(err)
+		log.Println("Failed to unmarshal JSON stats: %w", err)
 	}
 
 	// Debug output metrics from stats
@@ -218,13 +222,12 @@ func (m *Metrics) getBaseMetrics(dockerClient *client.Client, id string, wg *syn
 		bm.pids = int(pidsStats["current"].(float64))
 	}
 
-	defer wg.Done()
+	// defer wg.Done()
 	results <- &bm
 }
 
 // Get line count from logs for specified container by id
 func (m *Metrics) getLogsCount(dockerClient *client.Client, id string, stdout bool, stderr bool, wg *sync.WaitGroup, results chan *LogMetric) {
-
 	// Fill in options to read container logs
 	logsOptions := container.LogsOptions{
 		ShowStdout: stdout,
@@ -234,14 +237,16 @@ func (m *Metrics) getLogsCount(dockerClient *client.Client, id string, stdout bo
 	// Get log content
 	logs, err := dockerClient.ContainerLogs(context.Background(), id, logsOptions)
 	if err != nil {
-		panic(err)
+		log.Println("Failed to get container logs: %w", err)
+		return
 	}
 	defer logs.Close()
 
 	// Read and parsing json
 	dataLogs, err := io.ReadAll(logs)
 	if err != nil {
-		panic(err)
+		log.Println("Failed to read container logs: %w", err)
+		return
 	}
 
 	// Debug output logs
@@ -267,7 +272,8 @@ func (m *Metrics) getLogsCount(dockerClient *client.Client, id string, stdout bo
 func (m *Metrics) getInspect(dockerClient *client.Client, id string, wg *sync.WaitGroup, results chan *InspectMetric) {
 	inspect, err := dockerClient.ContainerInspect(context.Background(), id)
 	if err != nil {
-		panic(err)
+		log.Println("Failed to inspect container: %w", err)
+		return
 	}
 	// Debug output inspect data
 	// godump.Dump(inspect)
@@ -276,7 +282,8 @@ func (m *Metrics) getInspect(dockerClient *client.Client, id string, wg *sync.Wa
 	// Converting string to time type
 	startedTime, err := time.Parse(time.RFC3339Nano, startedDate)
 	if err != nil {
-		panic(err)
+		log.Println("Failed to parse started time: %w", err)
+		return
 	}
 	// Converting to timestamp
 	startedTimestamp := float64(startedTime.Unix())
@@ -403,21 +410,21 @@ func (m *Metrics) prometheusMetrics(id string, hostname string) []string {
 	// Logs
 	data = append(data, m.prometheusFormat(
 		"docker_logs_stdout_count",
-		"Number of logs from stdout stream in the last 10 seconds",
+		"Number of logs from stdout stream",
 		"counter", id, containerName, hostname,
 		m.logMetrics[id].stdout,
 	)...)
 
 	data = append(data, m.prometheusFormat(
 		"docker_logs_stderr_count",
-		"Number of logs from stderr stream in the last 10 seconds",
+		"Number of logs from stderr stream",
 		"counter", id, containerName, hostname,
 		m.logMetrics[id].stderr,
 	)...)
 
 	data = append(data, m.prometheusFormat(
 		"docker_logs_all_count",
-		"Number of logs from all stream in the last 10 seconds",
+		"Number of logs from all stream",
 		"counter", id, containerName, hostname,
 		m.logMetrics[id].stdall,
 	)...)
@@ -445,22 +452,35 @@ func (m *Metrics) getMetrics(dockerClient *client.Client) []string {
 	wg.Add(len(m.id))
 	results := make(chan *BaseMetrics, len(m.id))
 
+	// Limit the number of concurrent goroutines to avoid overloading the Docker API
+	if m.maxWorkers == 0 {
+		m.maxWorkers = len(m.id)
+	}
+	buffer := make(chan struct{}, m.maxWorkers)
+
 	for _, id := range m.id {
-		go m.getBaseMetrics(dockerClient, id, &wg, results)
+		buffer <- struct{}{}
+		go func(containerID string) {
+			defer func() { <-buffer }()
+			defer wg.Done()
+			m.getBaseMetrics(dockerClient, containerID, results)
+		}(id)
 	}
 
 	wg.Wait()
 	close(results)
 
 	// Initialize the metrics structure
-	m.baseMetrics = map[string]*BaseMetrics{}
+	m.baseMetrics = make(map[string]*BaseMetrics, len(results))
 
 	// Fill the map with values
 	for r := range results {
-		m.baseMetrics[r.id] = r
+		if r != nil {
+			m.baseMetrics[r.id] = r
+		}
 	}
 
-	// Create x2 groups
+	// Create x2 groups for logs (stdout and stderr)
 	wg.Add(len(m.id) * 2)
 	logResults := make(chan *LogMetric, len(m.id)*2)
 
@@ -476,12 +496,13 @@ func (m *Metrics) getMetrics(dockerClient *client.Client) []string {
 	// Get metrics from logs
 	m.logMetrics = map[string]*LogMetrics{}
 	for lr := range logResults {
+		// Initialize the LogMetrics structure if it doesn't exist
 		if m.logMetrics[lr.id] == nil {
 			m.logMetrics[lr.id] = &LogMetrics{}
 		}
 		if lr.stdout {
 			m.logMetrics[lr.id].stdout = lr.value
-		} else {
+		} else if lr.stderr {
 			m.logMetrics[lr.id].stderr = lr.value
 		}
 	}
@@ -536,11 +557,12 @@ func (m *Metrics) getMetrics(dockerClient *client.Client) []string {
 
 // Logging http server requests
 func loggingMiddleware(next http.Handler) http.Handler {
+	logger := log.New(os.Stdout, "", log.LstdFlags)
 	log := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		log.Printf("%s request on %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+		logger.Printf("%s request on %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
 		next.ServeHTTP(w, r)
-		log.Printf("Response time %v from %s", time.Since(start)/1000000*1000000, r.RemoteAddr)
+		logger.Printf("Response time %v from %s", time.Since(start)/1000000*1000000, r.RemoteAddr)
 	})
 	return log
 }
@@ -548,12 +570,23 @@ func loggingMiddleware(next http.Handler) http.Handler {
 func main() {
 	// Initialize the main structure
 	var metrics *Metrics = &Metrics{}
+	var err error
+
+	// Get environment variables
+	maxWorkers := os.Getenv("DOCKER_MAX_WORKERS")
+	_, err = fmt.Sscanf(maxWorkers, "%d", &metrics.maxWorkers)
+	if err != nil || metrics.maxWorkers <= 0 {
+		metrics.maxWorkers = 0
+		fmt.Println("An unlimited number of concurrent goroutines are used.")
+	} else {
+		fmt.Printf("%d concurrent goroutines are used.", metrics.maxWorkers)
+	}
 
 	// Create client with connection parameters from environment variables and approval of the API version with the Docker Daemon
 	dockerClient, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	client.NewClientWithOpts()
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to create Docker client: %v", err)
 	}
 	defer dockerClient.Close()
 
@@ -573,8 +606,10 @@ func main() {
 	logSrv := loggingMiddleware(httpServerMux)
 
 	// Start HTTP server
-	err = http.ListenAndServe(":9333", logSrv)
+	port := "9333"
+	fmt.Println("Exporter started on " + port + " port.")
+	err = http.ListenAndServe(":"+port, logSrv)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Failed to start HTTP server: %v", err)
 	}
 }
