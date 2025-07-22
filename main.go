@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -17,14 +18,16 @@ import (
 )
 
 type Metrics struct {
-	containersUp   int
-	containersDown int
-	id             []string
-	info           map[string]*Info
-	baseMetrics    map[string]*BaseMetrics
-	logMetrics     map[string]*LogMetrics
-	inspectMetrics map[string]float64
-	maxWorkers     int
+	containersUp        int
+	containersDown      int
+	id                  []string
+	info                map[string]*Info
+	baseMetrics         map[string]*BaseMetrics
+	getLogMetrics       bool
+	getLogCustomMetrics bool
+	logRegex            *regexp.Regexp
+	logMetrics          map[string]*LogMetrics
+	inspectMetrics      map[string]float64
 }
 
 type Info struct {
@@ -50,16 +53,20 @@ type BaseMetrics struct {
 }
 
 type LogMetrics struct {
-	stdout int
-	stderr int
-	stdall int
+	stdout       int
+	stderr       int
+	stdall       int
+	stderrCustom int
+	stdoutCustom int
+	stdCustom    int
 }
 
 type LogMetric struct {
-	id     string
-	stdout bool
-	stderr bool
-	value  int
+	id          string
+	stdout      bool
+	stderr      bool
+	value       int
+	customValue int
 }
 
 type InspectMetric struct {
@@ -102,11 +109,11 @@ func (m *Metrics) getContainers(dockerClient *client.Client, All bool) (map[stri
 }
 
 // Get metric list for specified container by id
-func (m *Metrics) getBaseMetrics(dockerClient *client.Client, id string, results chan *BaseMetrics) {
-	stats, err := dockerClient.ContainerStats(context.Background(), id, false)
+func (m *Metrics) getBaseMetrics(dockerClient *client.Client, id string) *BaseMetrics {
+	stats, err := dockerClient.ContainerStatsOneShot(context.Background(), id)
 	if err != nil {
 		log.Println("Failed to get container stats: %w", err)
-		return
+		return nil
 	}
 	defer stats.Body.Close()
 
@@ -114,7 +121,7 @@ func (m *Metrics) getBaseMetrics(dockerClient *client.Client, id string, results
 	jsonStats, err := io.ReadAll(stats.Body)
 	if err != nil {
 		log.Println("Failed to read container stats: %w", err)
-		return
+		return nil
 	}
 
 	// Create a map to extract data from json
@@ -223,7 +230,7 @@ func (m *Metrics) getBaseMetrics(dockerClient *client.Client, id string, results
 	}
 
 	// defer wg.Done()
-	results <- &bm
+	return &bm
 }
 
 // Get line count from logs for specified container by id
@@ -254,14 +261,27 @@ func (m *Metrics) getLogsCount(dockerClient *client.Client, id string, stdout bo
 
 	// Convert bytes to text and get array from rows
 	lines := strings.Split(string(dataLogs), "\n")
-
+	// Get line count
 	countLogs := len(lines) - 1
 
+	// Parse errors/custom lines
+	errConuter := 0
+	if m.getLogCustomMetrics {
+		if len(lines) > 1 {
+			for _, line := range lines {
+				if m.logRegex.MatchString(line) {
+					errConuter++
+				}
+			}
+		}
+	}
+
 	logMetric := LogMetric{
-		id:     id,
-		stdout: stdout,
-		stderr: stderr,
-		value:  countLogs,
+		id:          id,
+		stdout:      stdout,
+		stderr:      stderr,
+		value:       countLogs,
+		customValue: errConuter,
 	}
 
 	defer wg.Done()
@@ -408,26 +428,37 @@ func (m *Metrics) prometheusMetrics(id string, hostname string) []string {
 	)...)
 
 	// Logs
-	data = append(data, m.prometheusFormat(
-		"docker_logs_stdout_count",
-		"Number of logs from stdout stream",
-		"counter", id, containerName, hostname,
-		m.logMetrics[id].stdout,
-	)...)
+	if m.getLogMetrics {
+		data = append(data, m.prometheusFormat(
+			"docker_logs_stdout_count",
+			"Number of logs from stdout stream",
+			"counter", id, containerName, hostname,
+			m.logMetrics[id].stdout,
+		)...)
 
-	data = append(data, m.prometheusFormat(
-		"docker_logs_stderr_count",
-		"Number of logs from stderr stream",
-		"counter", id, containerName, hostname,
-		m.logMetrics[id].stderr,
-	)...)
+		data = append(data, m.prometheusFormat(
+			"docker_logs_stderr_count",
+			"Number of logs from stderr stream",
+			"counter", id, containerName, hostname,
+			m.logMetrics[id].stderr,
+		)...)
 
-	data = append(data, m.prometheusFormat(
-		"docker_logs_all_count",
-		"Number of logs from all stream",
-		"counter", id, containerName, hostname,
-		m.logMetrics[id].stdall,
-	)...)
+		data = append(data, m.prometheusFormat(
+			"docker_logs_all_count",
+			"Number of logs from all stream",
+			"counter", id, containerName, hostname,
+			m.logMetrics[id].stdall,
+		)...)
+
+		if m.getLogCustomMetrics {
+			data = append(data, m.prometheusFormat(
+				"docker_logs_custom_count",
+				"Number of logs containing custom regular expression from all streams (by default, containing the error level)",
+				"counter", id, containerName, hostname,
+				m.logMetrics[id].stdCustom,
+			)...)
+		}
+	}
 
 	// Started time
 	data = append(data, m.prometheusFormat(
@@ -452,18 +483,11 @@ func (m *Metrics) getMetrics(dockerClient *client.Client, hostname string) []str
 	wg.Add(len(m.id))
 	results := make(chan *BaseMetrics, len(m.id))
 
-	// Limit the number of concurrent goroutines to avoid overloading the Docker API
-	if m.maxWorkers == 0 {
-		m.maxWorkers = len(m.id)
-	}
-	buffer := make(chan struct{}, m.maxWorkers)
-
 	for _, id := range m.id {
-		buffer <- struct{}{}
 		go func(containerID string) {
-			defer func() { <-buffer }()
 			defer wg.Done()
-			m.getBaseMetrics(dockerClient, containerID, results)
+			res := m.getBaseMetrics(dockerClient, containerID)
+			results <- res
 		}(id)
 	}
 
@@ -480,36 +504,47 @@ func (m *Metrics) getMetrics(dockerClient *client.Client, hostname string) []str
 		}
 	}
 
-	// Create x2 groups for logs (stdout and stderr)
-	wg.Add(len(m.id) * 2)
-	logResults := make(chan *LogMetric, len(m.id)*2)
+	if m.getLogMetrics {
+		// Create x2 groups for logs (stdout and stderr)
+		wg.Add(len(m.id) * 2)
+		logResults := make(chan *LogMetric, len(m.id)*2)
 
-	// Get a list of custom metrics from logs
-	for _, id := range m.id {
-		go m.getLogsCount(dockerClient, id, true, false, &wg, logResults)
-		go m.getLogsCount(dockerClient, id, false, true, &wg, logResults)
-	}
-
-	wg.Wait()
-	close(logResults)
-
-	// Get metrics from logs
-	m.logMetrics = map[string]*LogMetrics{}
-	for lr := range logResults {
-		// Initialize the LogMetrics structure if it doesn't exist
-		if m.logMetrics[lr.id] == nil {
-			m.logMetrics[lr.id] = &LogMetrics{}
+		// Get a list of custom metrics from logs
+		for _, id := range m.id {
+			go m.getLogsCount(dockerClient, id, true, false, &wg, logResults)
+			go m.getLogsCount(dockerClient, id, false, true, &wg, logResults)
 		}
-		if lr.stdout {
-			m.logMetrics[lr.id].stdout = lr.value
-		} else if lr.stderr {
-			m.logMetrics[lr.id].stderr = lr.value
-		}
-	}
 
-	// Filling the sum of the streams
-	for _, id := range m.id {
-		m.logMetrics[id].stdall = m.logMetrics[id].stdout + m.logMetrics[id].stderr
+		wg.Wait()
+		close(logResults)
+
+		// Get metrics from logs
+		m.logMetrics = map[string]*LogMetrics{}
+		for lr := range logResults {
+			// Initialize the LogMetrics structure if it doesn't exist
+			if m.logMetrics[lr.id] == nil {
+				m.logMetrics[lr.id] = &LogMetrics{}
+			}
+			if lr.stdout {
+				m.logMetrics[lr.id].stdout = lr.value
+				if m.getLogCustomMetrics {
+					m.logMetrics[lr.id].stderrCustom = lr.customValue
+				}
+			} else if lr.stderr {
+				m.logMetrics[lr.id].stderr = lr.value
+				if m.getLogCustomMetrics {
+					m.logMetrics[lr.id].stdoutCustom = lr.customValue
+				}
+			}
+		}
+
+		// Filling the sum of the streams
+		for _, id := range m.id {
+			m.logMetrics[id].stdall = m.logMetrics[id].stdout + m.logMetrics[id].stderr
+			if m.getLogCustomMetrics {
+				m.logMetrics[id].stdCustom = m.logMetrics[id].stderrCustom + m.logMetrics[id].stdoutCustom
+			}
+		}
 	}
 
 	// Get start time containers
@@ -566,7 +601,7 @@ func loggingMiddleware(next http.Handler) http.Handler {
 }
 
 // Get hostname from Docker Info method
-func (m *Metrics) getDockerInfo(dockerClient *client.Client) string {
+func (m *Metrics) getHostname(dockerClient *client.Client) string {
 	info, err := dockerClient.Info(context.Background())
 	if err != nil {
 		log.Println("Failed to get hostname: %w", err)
@@ -579,16 +614,6 @@ func main() {
 	var metrics *Metrics = &Metrics{}
 	var err error
 
-	// Get environment variables
-	maxWorkers := os.Getenv("DOCKER_MAX_WORKERS")
-	_, err = fmt.Sscanf(maxWorkers, "%d", &metrics.maxWorkers)
-	if err != nil || metrics.maxWorkers <= 0 {
-		metrics.maxWorkers = 0
-		fmt.Println("An unlimited number of concurrent goroutines are used.")
-	} else {
-		fmt.Printf("%d concurrent goroutines are used.", metrics.maxWorkers)
-	}
-
 	// Create client with connection parameters from environment variables and approval of the API version with the Docker Daemon
 	dockerClient, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	client.NewClientWithOpts()
@@ -597,9 +622,31 @@ func main() {
 	}
 	defer dockerClient.Close()
 
+	// Get environment variables
+	getLogMetrics := os.Getenv("DOCKER_LOG_METRICS")
+	if getLogMetrics == "true" || getLogMetrics == "True" {
+		metrics.getLogMetrics = true
+	} else {
+		metrics.getLogMetrics = false
+	}
+	getLogCustomMetrics := os.Getenv("DOCKER_LOG_CUSTOM_METRICS")
+	if getLogCustomMetrics == "true" || getLogCustomMetrics == "True" {
+		metrics.getLogCustomMetrics = true
+		textRegex := os.Getenv("DOCKER_LOG_CUSTOM_QUERY")
+		if textRegex == "" {
+			textRegex = "\"err|error|ERR|ERROR\""
+		}
+		metrics.logRegex, err = regexp.Compile(textRegex)
+		if err != nil {
+			log.Fatalf("Failed to compile custom query regular expression: %v", err)
+		}
+	} else {
+		metrics.getLogCustomMetrics = false
+	}
+
 	// Get hostname
 	// hostname, _ := os.Hostname()
-	hostname := metrics.getDockerInfo(dockerClient)
+	hostname := metrics.getHostname(dockerClient)
 
 	// Create HTTP server
 	httpServerMux := http.NewServeMux()
