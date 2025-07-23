@@ -8,6 +8,9 @@ Comparative measurement of CPU load using `cAdvisor` and `logporter` metrics:
 
 ![](/img/logporter.jpg)
 
+> [!NOTE]
+> On average, CPU consumption is 20 times lower and memory consumption is 10 times lower in the basic metrics mode (including IOps and uptime) compared to `cAdvisor`.
+
 ## Why collect log counts?
 
 - Monitor the frequency and number of errors in logs using a custom query.
@@ -15,7 +18,7 @@ Comparative measurement of CPU load using `cAdvisor` and `logporter` metrics:
 - Speed ​​up log analysis by displaying at what point in time the most messages were received from the standard and error stream.
 
 > [!WARNING]
-> Receiving these metrics directly affects performance and the CPU load may become higher than `cAdvisor` (directly depends on the number of running containers).
+> Receiving metrics data directly affects performance and CPU load may become higher than `cAdvisor`, this directly depends on the number of running containers, so it is recommended to use it with a small number of running containers or for one in log parsing mode.
 
 ## Roadmap
 
@@ -82,7 +85,7 @@ scrape_configs:
 ```
 
 > [!NOTE]
-> Use the request processing time metrics in the exporter logs to configure polling intervals and response waits in Prometheus (this is only relevant if you are using custom metrics for getting logs count).
+> If you are using custom metrics to get log counts, change the polling interval and response timeout settings in Prometheus based on the requests processing time in the exporter logs.
 
 - Import the prepared public [Grafana dashboard](https://grafana.com/grafana/dashboards/23573-docker-exporter-logporter) using the id `23573` or from [json](https://github.com/Lifailon/logporter/blob/main/grafana-dashboard.json) file.
 
