@@ -1,19 +1,17 @@
 # logporter
 
-A simple and lightweight alternative to [cAdvisor](https://github.com/google/cadvisor) (on average 20 times faster, by the results of both exporters) for getting all basic metrics from Docker containers, and also supports getting metrics by logs.
+A simple and lightweight alternative to [cAdvisor](https://github.com/google/cadvisor) for getting all basic metrics from Docker containers with support metrics by logs.
 
-CPU load measurements in the `cAdvisor` for the last 2 hours:
+Comparative measurement of CPU load using `cAdvisor` and `logporter` metrics:
 
 ![](/img/cadvisor.jpg)
-
-CPU load measurements in the `logporter` for the last 2 hours:
 
 ![](/img/logporter.jpg)
 
 ## Why collect log counts?
 
-- Monitor the number of errors in logs using a custom query.
-- Compare the increased load with the number of logged messages. If the application is not resource-intensive, the number of logged messages will show the increased load.
+- Monitor the frequency and number of errors in logs using a custom query.
+- Compare the load increase with the number of logged messages. If the application does not consume many resources, the number of logged messages will reflect the load increase.
 - Speed ​​up log analysis by displaying at what point in time the most messages were received from the standard and error stream.
 
 > [!WARNING]
@@ -40,7 +38,7 @@ git clone https://github.com/Lifailon/logporter
 cd logporter
 docker build -t lifailon/logporter .
 # or build for different architectures
-docker buildx build --platform linux/amd64,linux/arm64 .
+docker buildx build --platform linux/amd64,linux/arm64 -t lifailon/logporter .
 ```
 
 ## Install
@@ -86,8 +84,8 @@ scrape_configs:
 > [!NOTE]
 > Use the request processing time metrics in the exporter logs to configure polling intervals and response waits in Prometheus (this is only relevant if you are using custom metrics for getting logs count).
 
-- Import the prepared public [Grafana dashboard](https://grafana.com/grafana/dashboards/23573-docker-exporter-logporter) using the id `23573` or from a [json](https://github.com/Lifailon/logporter/blob/main/grafana/dashboard.json) file.
+- Import the prepared public [Grafana dashboard](https://grafana.com/grafana/dashboards/23573-docker-exporter-logporter) using the id `23573` or from [json](https://github.com/Lifailon/logporter/blob/main/grafana-dashboard.json) file.
 
-![](/img/basic-metrics.jpg)
+![](/img/metrics-1.jpg)
 
-![](/img/other-metrics.jpg)
+![](/img/metrics-2.jpg)
