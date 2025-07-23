@@ -2,14 +2,14 @@
 
 A simple and lightweight alternative to [cAdvisor](https://github.com/google/cadvisor) for getting all basic metrics from Docker containers with support metrics by logs.
 
-Comparative measurement of CPU load using `cAdvisor` and `logporter` metrics:
+Comparative measurement of CPU and memory usage from `cAdvisor` and `logporter` metrics in 3 hours:
 
-![](/img/cadvisor.jpg)
+![](/img/cadvisor-cpu-usage.jpg)
 
-![](/img/logporter.jpg)
+![](/img/logporter-cpu-usage.jpg)
 
 > [!NOTE]
-> On average, CPU consumption is 20 times lower and memory consumption is 10 times lower in the basic metrics mode (including IOps and uptime) compared to `cAdvisor`.
+> On average, CPU consumption is 15-20 times lower and memory consumption is 10 times lower in the basic metrics mode (including IOps and uptime) compared to `cAdvisor`.
 
 ## Why collect log counts?
 
@@ -87,8 +87,32 @@ scrape_configs:
 > [!NOTE]
 > If you are using custom metrics to get log counts, change the polling interval and response timeout settings in Prometheus based on the requests processing time in the exporter logs.
 
-- Import the prepared public [Grafana dashboard](https://grafana.com/grafana/dashboards/23573-docker-exporter-logporter) using the id `23573` or from [json](https://github.com/Lifailon/logporter/blob/main/grafana-dashboard.json) file.
+- Import the prepared public [Grafana dashboard](https://grafana.com/grafana/dashboards/23573-docker-exporter-logporter) using the id `23573` or from [json](https://github.com/Lifailon/logporter/blob/main/grafana/dashboard.json) file.
 
 ![](/img/metrics-1.jpg)
 
 ![](/img/metrics-2.jpg)
+
+- Set up alerts via [Alertmanager](https://github.com/prometheus/alertmanager), for example to receive notifications about high CPU load and reboot containers:
+
+```yml
+groups:
+- name: processor
+  rules:
+  - alert: CONTAINER_CPU_WARN
+    expr: avg(rate(docker_cpu_usage_total[1m])) by (containerName) * 100 > 50
+    for: 1m
+    labels:
+      severity: warning
+    annotations:
+      description: "CPU load above 50% on container {{ $labels.containerName }}"
+
+- name: reboot
+  rules:
+  - alert: CONTAINER_UPTIME_ERR
+    expr: avg(changes(docker_started_time[1m])) by (containerName,hostname) > 0
+    labels:
+      severity: error
+    annotations:
+      description: "Reboot container {{ $labels.containerName }} on {{ $labels.hostname }}"
+```
