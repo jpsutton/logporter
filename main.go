@@ -634,7 +634,7 @@ func main() {
 		metrics.getLogCustomMetrics = true
 		textRegex := os.Getenv("DOCKER_LOG_CUSTOM_QUERY")
 		if textRegex == "" {
-			textRegex = "\"err|error|ERR|ERROR\""
+			textRegex = `\"(err|error|ERR|ERROR)\"`
 		}
 		metrics.logRegex, err = regexp.Compile(textRegex)
 		if err != nil {

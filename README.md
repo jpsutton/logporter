@@ -65,11 +65,11 @@ docker-compose up -d
 
 Use environment variables to apply custom metrics:
 
-| Lable                       | Type      | Default                      | Description                                             |
-| -                           | -         | -                            | -                                                       |
-| `DOCKER_LOG_METRICS`        | `boolean` | `false`                      | Getting the number of messages in logs from two threads |
-| `DOCKER_LOG_CUSTOM_METRICS` | `boolean` | `false`                      | Enable getting custom metrics                           |
-| `DOCKER_LOG_CUSTOM_QUERY`   | `string`  | `\"err\|error\|ERR\|ERROR\"` | Custom filter query in regex format                     |
+| Lable                       | Type      | Default                        | Description                                                                                           |
+| -                           | -         | -                              | -                                                                                                     |
+| `DOCKER_LOG_METRICS`        | `boolean` | `false`                        | Getting the number of messages in logs from all streams                                               |
+| `DOCKER_LOG_CUSTOM_METRICS` | `boolean` | `false`                        | Enable getting custom metrics                                                                         |
+| `DOCKER_LOG_CUSTOM_QUERY`   | `string`  | `\"(err\|error\|ERR\|ERROR)\"` | Custom filter query in regex format (default example is equivalent to `error` level in `json` format) |
 
 - Connect the new target in the `prometheus.yml` configuration:
 
@@ -84,7 +84,7 @@ scrape_configs:
 ```
 
 > [!NOTE]
-> Use the request processing time metrics in the exporter logs to configure polling intervals and response waits in Prometheus (only if you are using custom metrics).
+> Use the request processing time metrics in the exporter logs to configure polling intervals and response waits in Prometheus (this is only relevant if you are using custom metrics for getting logs count).
 
 - Import the prepared public [Grafana dashboard](https://grafana.com/grafana/dashboards/23573-docker-exporter-logporter) using the id `23573` or from a [json](https://github.com/Lifailon/logporter/blob/main/grafana/dashboard.json) file.
 
