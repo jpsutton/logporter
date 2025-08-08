@@ -87,7 +87,7 @@ scrape_configs:
 > [!NOTE]
 > If you are using custom metrics to get log counts, change the polling interval and response timeout settings in Prometheus based on the requests processing time in the exporter logs.
 
-- Import the prepared public [Grafana dashboard](https://grafana.com/grafana/dashboards/23573-docker-exporter-logporter) using the id `23573` or from [json](https://github.com/Lifailon/logporter/blob/main/grafana/dashboard.json) file.
+- Import the prepared public [Grafana dashboard](https://grafana.com/grafana/dashboards/23848-docker-exporter-logporter) using the id `23848` or from [json](https://raw.githubusercontent.com/Lifailon/logporter/refs/heads/main/grafana/dashboard.json) file.
 
 ![](/img/metrics-1.jpg)
 
